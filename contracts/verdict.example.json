@@ -1,0 +1,9 @@
+{
+  "verdict": "WAIT",
+  "reasons": ["recipient_name_mismatch"],
+  "extracted": { "amount": 1800.00, "recipient": "Thabo S", "reference": "SNK1800" },
+  "expected":  { "amount": 1800.00, "recipient": "Thabo Sneakers", "reference": "SNK1800" },
+  "ocr_confidence": 0.91,
+  "duplicate": { "found": false, "same_seller": false },
+  "raw_ocr_text": "..."
+}
