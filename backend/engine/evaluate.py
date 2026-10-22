@@ -1,4 +1,3 @@
-# backend/engine/evaluate.py
 import re
 from .templates import get_template
 
@@ -72,7 +71,6 @@ def evaluate(extracted: dict, expected: dict, ocr_confidence: float, dup_result:
         reasons.append("recipient_mismatch")
 
     # 5. GENERATE EXPLANATION
-    # Pick the most relevant template based on the verdict
     if verdict == "MATCH":
         explanation = get_template("MATCH")
     elif "amount_mismatch" in reasons:
