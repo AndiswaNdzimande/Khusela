@@ -1,26 +1,17 @@
 import os
-import google.generativeai as genai
 from dotenv import load_dotenv
-from .templates import get_template
+from google import genai
 
-# Load environment variables (from .env file)
+# Load environment variables
 load_dotenv()
 
-# Configure Gemini
 api_key = os.getenv("GEMINI_API_KEY")
-if api_key:
-    genai.configure(api_key=api_key)
 
 def generate_ai_explanation(verdict_result: dict) -> str:
-    """
-    TASK-13: Takes the deterministic verdict and asks Gemini to explain it.
-    Strict timeout and fallback to templates if the AI fails.
-    """
     verdict = verdict_result.get("verdict", "WAIT")
     reasons = verdict_result.get("reasons", [])
     template_fallback = verdict_result.get("explanation", "Please verify in your bank.")
 
-    # If no API key is set, immediately return the template fallback
     if not api_key:
         print("WARNING: No GEMINI_API_KEY found. Using template fallback.")
         return template_fallback
@@ -41,18 +32,14 @@ def generate_ai_explanation(verdict_result: dict) -> str:
     """
 
     try:
-        # Use a fast model (gemini-1.5-flash)
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        
-        # We use a short timeout so the demo doesn't hang if the API is slow
-        response = model.generate_content(prompt)
-        
-        if response.text:
-            return response.text.strip()
-        else:
-            return template_fallback
+        # Use the new Google GenAI client
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+        )
+        return response.text.strip()
 
     except Exception as e:
-        # If the AI fails (timeout, quota exceeded, no internet), fail gracefully
         print(f"AI Error: {e}. Falling back to template.")
         return template_fallback
