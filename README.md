@@ -24,7 +24,9 @@ OCR uses Tesseract with a Docker fallback. Run the setup check once per laptop:
 ```
 
 See [docs/ocr-setup.md](docs/ocr-setup.md) for per-OS install steps,
-configuration and troubleshooting.
+configuration and troubleshooting, and
+[docs/ocr-preprocessing.md](docs/ocr-preprocessing.md) for the
+grayscale/resize/threshold pipeline.
 
 ## Tests
 

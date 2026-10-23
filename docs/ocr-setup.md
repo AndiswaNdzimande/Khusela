@@ -20,6 +20,10 @@ print(result.confidence)             # 0.0 - 1.0, ready for the rule engine
 print(result.backend)                # "local" or "docker"
 ```
 
+Screenshots are preprocessed (grayscale, resize, contrast, threshold) before
+OCR by default. See [ocr-preprocessing.md](ocr-preprocessing.md) for tuning and
+CLI usage.
+
 ## Quick start
 
 From the repository root:

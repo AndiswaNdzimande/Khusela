@@ -82,7 +82,7 @@ def test_run_ocr_uses_selected_backend(monkeypatch):
 
     monkeypatch.setattr(engine, "_run_docker", fake_docker)
 
-    result = engine.run_ocr(b"fake-image")
+    result = engine.run_ocr(b"fake-image", preprocess=False)
 
     assert result.backend == "docker"
     assert result.text == "R1,800.00\nThabo Sneakers"
@@ -106,7 +106,7 @@ def test_broken_local_install_falls_back_to_docker_in_auto_mode(monkeypatch):
         lambda image, language, psm: ("fallback text", 0.42, None),
     )
 
-    result = engine.run_ocr(b"image")
+    result = engine.run_ocr(b"image", preprocess=False)
 
     assert result.backend == "docker"
     assert result.text == "fallback text"
@@ -138,5 +138,6 @@ def test_real_ocr_on_blank_image():
     result = engine.run_ocr(buffer.getvalue())
 
     assert result.backend in {"local", "docker"}
+    assert result.preprocessed is True
     assert result.text == ""
     assert result.confidence == 0.0

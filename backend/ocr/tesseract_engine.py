@@ -74,6 +74,7 @@ class OcrResult:
     language: str
     psm: int
     tesseract_version: str | None = None
+    preprocessed: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -459,6 +460,8 @@ def run_ocr(
     language: str | None = None,
     psm: int | None = None,
     backend: str | None = None,
+    preprocess: bool = True,
+    preprocess_config: Any = None,
 ) -> OcrResult:
     """Run Tesseract on an image using the best available backend.
 
@@ -470,6 +473,9 @@ def run_ocr(
             or ``6`` (a single uniform block of text, good for screenshots).
         backend: ``local``, ``docker`` or ``auto``. Overrides
             ``KHUSELA_OCR_BACKEND``.
+        preprocess: Apply grayscale/resize/threshold preprocessing first
+            (enabled by default; see :mod:`ocr.preprocess`).
+        preprocess_config: Optional :class:`ocr.preprocess.PreprocessConfig`.
 
     Raises:
         OcrUnavailableError: No backend is usable (includes install help).
@@ -483,6 +489,14 @@ def run_ocr(
             psm = int(raw_psm)
         except ValueError as exc:
             raise ValueError(f"KHUSELA_OCR_PSM must be an integer, got {raw_psm!r}") from exc
+
+    if preprocess:
+        try:
+            from .preprocess import preprocess_bytes
+        except ImportError:  # running tesseract_engine.py as a plain script
+            from preprocess import preprocess_bytes  # type: ignore[no-redef]
+
+        image = preprocess_bytes(image, preprocess_config)
 
     selected = select_backend(backend)
 
@@ -508,6 +522,7 @@ def run_ocr(
         language=lang,
         psm=psm,
         tesseract_version=version,
+        preprocessed=bool(preprocess),
     )
 
 
@@ -557,6 +572,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--backend", choices=["auto", "local", "docker"], help="force a backend")
     parser.add_argument("--lang", default=None, help="Tesseract language code (default: eng)")
     parser.add_argument("--psm", type=int, default=None, help="Tesseract page segmentation mode (default: 6)")
+    parser.add_argument(
+        "--no-preprocess",
+        action="store_true",
+        help="skip grayscale/resize/threshold preprocessing",
+    )
     parser.add_argument("--json", action="store_true", help="print OCR output as JSON")
     args = parser.parse_args(argv)
 
@@ -569,7 +589,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.check or not args.image:
             return _check()
 
-        result = run_ocr(args.image, language=args.lang, psm=args.psm, backend=args.backend)
+        result = run_ocr(
+            args.image,
+            language=args.lang,
+            psm=args.psm,
+            backend=args.backend,
+            preprocess=not args.no_preprocess,
+        )
     except (OcrError, OSError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

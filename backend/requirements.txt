@@ -8,3 +8,4 @@ google-genai>=1.0
 # backend/ocr is used as a fallback (see docs/ocr-setup.md).
 pytesseract>=0.3.10
 Pillow>=10.0
+numpy>=1.24
