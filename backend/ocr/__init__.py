@@ -1,5 +1,13 @@
 """Khusela OCR package: local Tesseract with a Docker fallback."""
 
+from .extract import (
+    ExtractedFields,
+    extract_amount,
+    extract_fields,
+    extract_recipient,
+    extract_reference,
+    parse_amount,
+)
 from .preprocess import (
     PreprocessConfig,
     preprocess_bytes,
@@ -23,6 +31,7 @@ from .tesseract_engine import (
 )
 
 __all__ = [
+    "ExtractedFields",
     "OcrError",
     "OcrResult",
     "OcrUnavailableError",
@@ -30,9 +39,14 @@ __all__ = [
     "available_backends",
     "build_docker_image",
     "docker_image_available",
+    "extract_amount",
+    "extract_fields",
+    "extract_recipient",
+    "extract_reference",
     "is_docker_available",
     "is_local_available",
     "local_tesseract_version",
+    "parse_amount",
     "preprocess_bytes",
     "preprocess_image",
     "resize_for_ocr",

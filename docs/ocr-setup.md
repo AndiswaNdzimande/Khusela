@@ -22,7 +22,8 @@ print(result.backend)                # "local" or "docker"
 
 Screenshots are preprocessed (grayscale, resize, contrast, threshold) before
 OCR by default. See [ocr-preprocessing.md](ocr-preprocessing.md) for tuning and
-CLI usage.
+CLI usage, and [ocr-field-extraction.md](ocr-field-extraction.md) to turn the
+OCR text into amount/recipient/reference fields.
 
 ## Quick start
 
