@@ -383,9 +383,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Size: {processed.size[0]}x{processed.size[1]} ({processed.mode})")
             if "ocr" in summary:
                 ocr = summary["ocr"]
-                print(f"OCR backend: {ocr['backend']} (confidence {ocr['confidence']:.2f})")
+                print(
+                    f"OCR backend: {ocr['backend']} "
+                    f"(confidence {ocr['ocr_confidence']:.2f})"
+                )
                 print("--- text ---")
-                print(ocr["text"])
+                print(ocr["raw_ocr_text"])
         return 0
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

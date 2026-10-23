@@ -1,5 +1,12 @@
 """Khusela OCR package: local Tesseract with a Docker fallback."""
 
+from .confidence import (
+    LOW_CONFIDENCE_THRESHOLD,
+    RELIABLE_CONFIDENCE_THRESHOLD,
+    ConfidenceScore,
+    compute_confidence,
+    confidence_label,
+)
 from .extract import (
     ExtractedFields,
     extract_amount,
@@ -32,12 +39,17 @@ from .tesseract_engine import (
 
 __all__ = [
     "ExtractedFields",
+    "LOW_CONFIDENCE_THRESHOLD",
     "OcrError",
     "OcrResult",
     "OcrUnavailableError",
     "PreprocessConfig",
+    "RELIABLE_CONFIDENCE_THRESHOLD",
+    "ConfidenceScore",
     "available_backends",
     "build_docker_image",
+    "compute_confidence",
+    "confidence_label",
     "docker_image_available",
     "extract_amount",
     "extract_fields",

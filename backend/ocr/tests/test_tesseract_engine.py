@@ -78,7 +78,16 @@ def test_run_ocr_uses_selected_backend(monkeypatch):
     def fake_docker(image, language, psm):
         assert image == b"fake-image"
         assert language == "eng"
-        return "R1,800.00\nThabo Sneakers", 0.91, None
+        return (
+            "R1,800.00\nThabo Sneakers",
+            engine.ConfidenceScore(
+                score=0.91,
+                mean_word_confidence=0.93,
+                low_confidence_ratio=0.0,
+                word_count=3,
+            ),
+            None,
+        )
 
     monkeypatch.setattr(engine, "_run_docker", fake_docker)
 
@@ -89,6 +98,36 @@ def test_run_ocr_uses_selected_backend(monkeypatch):
     assert result.confidence == 0.91
     assert result.language == "eng"
     assert result.psm == 6
+
+
+def test_result_output_contains_raw_text_and_confidence(monkeypatch):
+    monkeypatch.setattr(engine, "select_backend", lambda preferred=None: "docker")
+    monkeypatch.setattr(
+        engine,
+        "_run_docker",
+        lambda image, language, psm: (
+            "Amount: R1,800.00\nTo: Thabo Sneakers",
+            engine.ConfidenceScore(
+                score=0.91,
+                mean_word_confidence=0.93,
+                low_confidence_ratio=0.0,
+                word_count=6,
+            ),
+            None,
+        ),
+    )
+
+    result = engine.run_ocr(b"fake-image", preprocess=False)
+    output = result.as_dict()
+
+    assert result.raw_text == result.text == "Amount: R1,800.00\nTo: Thabo Sneakers"
+    assert result.ocr_confidence == result.confidence == 0.91
+    assert output["raw_ocr_text"] == result.raw_text
+    assert output["ocr_confidence"] == 0.91
+    assert output["confidence_label"] == "high"
+    assert output["word_count"] == 6
+    assert output["mean_word_confidence"] == 0.93
+    assert output["low_confidence_ratio"] == 0.0
 
 
 def test_broken_local_install_falls_back_to_docker_in_auto_mode(monkeypatch):
@@ -103,7 +142,16 @@ def test_broken_local_install_falls_back_to_docker_in_auto_mode(monkeypatch):
     monkeypatch.setattr(
         engine,
         "_run_docker",
-        lambda image, language, psm: ("fallback text", 0.42, None),
+        lambda image, language, psm: (
+            "fallback text",
+            engine.ConfidenceScore(
+                score=0.42,
+                mean_word_confidence=0.7,
+                low_confidence_ratio=0.4,
+                word_count=5,
+            ),
+            None,
+        ),
     )
 
     result = engine.run_ocr(b"image", preprocess=False)

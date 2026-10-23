@@ -15,15 +15,17 @@ calls the same functions:
 from ocr import run_ocr
 
 result = run_ocr("screenshot.png")   # or bytes / file object / PIL.Image
-print(result.text)
+print(result.raw_text)               # raw OCR text
 print(result.confidence)             # 0.0 - 1.0, ready for the rule engine
+print(result.confidence_label)       # "low", "medium" or "high"
 print(result.backend)                # "local" or "docker"
 ```
 
 Screenshots are preprocessed (grayscale, resize, contrast, threshold) before
 OCR by default. See [ocr-preprocessing.md](ocr-preprocessing.md) for tuning and
-CLI usage, and [ocr-field-extraction.md](ocr-field-extraction.md) to turn the
-OCR text into amount/recipient/reference fields.
+CLI usage, [ocr-confidence.md](ocr-confidence.md) for how confidence and raw
+text are reported, and [ocr-field-extraction.md](ocr-field-extraction.md) to
+turn the OCR text into amount/recipient/reference fields.
 
 ## Quick start
 

@@ -19,17 +19,31 @@ Command line usage::
 from __future__ import annotations
 
 import argparse
-import csv
 import io
 import json
 import os
 import shutil
 import subprocess
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, BinaryIO, Union
+
+try:  # normal package import
+    from .confidence import (
+        RELIABLE_CONFIDENCE_THRESHOLD,
+        ConfidenceScore,
+        confidence_label,
+        parse_tsv as _parse_tsv_confidence,
+    )
+except ImportError:  # running tesseract_engine.py as a plain script
+    from confidence import (  # type: ignore[no-redef]
+        RELIABLE_CONFIDENCE_THRESHOLD,
+        ConfidenceScore,
+        confidence_label,
+        parse_tsv as _parse_tsv_confidence,
+    )
 
 DEFAULT_DOCKER_IMAGE = "khusela-ocr:latest"
 DOCKERFILE = Path(__file__).with_name("Dockerfile")
@@ -66,7 +80,7 @@ class OcrUnavailableError(OcrError):
 
 @dataclass(frozen=True)
 class OcrResult:
-    """The text and mean word confidence (0.0-1.0) returned by Tesseract."""
+    """Raw OCR text, reliability score and engine metadata."""
 
     text: str
     confidence: float
@@ -75,9 +89,44 @@ class OcrResult:
     psm: int
     tesseract_version: str | None = None
     preprocessed: bool = False
+    word_count: int = 0
+    mean_word_confidence: float = 0.0
+    low_confidence_ratio: float = 0.0
+
+    @property
+    def raw_text(self) -> str:
+        """Alias used by the verdict contract (``raw_ocr_text``)."""
+        return self.text
+
+    @property
+    def ocr_confidence(self) -> float:
+        """Alias used by the verdict contract (``ocr_confidence``)."""
+        return self.confidence
+
+    @property
+    def confidence_label(self) -> str:
+        return confidence_label(self.confidence)
+
+    @property
+    def is_reliable(self) -> bool:
+        return self.confidence >= RELIABLE_CONFIDENCE_THRESHOLD
 
     def as_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        """Return contract-shaped output, including the raw OCR text."""
+        return {
+            "raw_ocr_text": self.text,
+            "ocr_confidence": self.confidence,
+            "confidence_label": self.confidence_label,
+            "is_reliable": self.is_reliable,
+            "word_count": self.word_count,
+            "mean_word_confidence": self.mean_word_confidence,
+            "low_confidence_ratio": self.low_confidence_ratio,
+            "backend": self.backend,
+            "language": self.language,
+            "psm": self.psm,
+            "tesseract_version": self.tesseract_version,
+            "preprocessed": self.preprocessed,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -318,45 +367,14 @@ def _to_pil_image(data: bytes) -> Any:
 
 
 def parse_tsv(tsv: str) -> tuple[str, float]:
-    """Convert Tesseract TSV output into ``(text, mean_confidence)``.
+    """Convert Tesseract TSV output into ``(text, confidence_score)``.
 
-    Confidence is returned on the same 0.0-1.0 scale the rule engine expects.
-    Rows without a real confidence (``-1``) are ignored.
+    This wrapper keeps the original ``(text, float)`` API. Use
+    :func:`ocr.confidence.parse_tsv` when you also need the word count and
+    low-confidence ratio.
     """
-    lines: dict[tuple[str, str, str, str], list[str]] = {}
-    order: list[tuple[str, str, str, str]] = []
-    confidences: list[float] = []
-
-    reader = csv.DictReader(io.StringIO(tsv), delimiter="\t", quoting=csv.QUOTE_NONE)
-    for row in reader:
-        if str(row.get("level", "")).strip() != "5":
-            continue
-        word = (row.get("text") or "").strip()
-        if not word:
-            continue
-
-        key = (
-            str(row.get("page_num", "")),
-            str(row.get("block_num", "")),
-            str(row.get("par_num", "")),
-            str(row.get("line_num", "")),
-        )
-        if key not in lines:
-            lines[key] = []
-            order.append(key)
-        lines[key].append(word)
-
-        raw_conf = row.get("conf")
-        try:
-            conf = float(raw_conf)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            continue
-        if conf >= 0:
-            confidences.append(conf)
-
-    text = "\n".join(" ".join(lines[key]) for key in order)
-    confidence = round(sum(confidences) / len(confidences) / 100.0, 4) if confidences else 0.0
-    return text, max(0.0, min(1.0, confidence))
+    text, score = _parse_tsv_confidence(tsv)
+    return text, score.score
 
 
 def _timeout_seconds() -> float:
@@ -371,7 +389,7 @@ def _run_local(
     image: ImageSource,
     language: str,
     psm: int,
-) -> tuple[str, float, str | None]:
+) -> tuple[str, ConfidenceScore, str | None]:
     try:
         import pytesseract
         from pytesseract import Output
@@ -396,7 +414,7 @@ def _run_local(
         # TesseractNotFoundError / TesseractError / bad language data.
         raise OcrError(f"Local Tesseract failed: {exc}") from exc
 
-    text, confidence = parse_tsv(str(tsv))
+    text, confidence = _parse_tsv_confidence(str(tsv))
     return text, confidence, local_tesseract_version()
 
 
@@ -405,7 +423,7 @@ def _run_docker(
     language: str,
     psm: int,
     docker_image: str | None = None,
-) -> tuple[str, float, None]:
+) -> tuple[str, ConfidenceScore, None]:
     docker = _docker_executable()
     if not docker:
         raise OcrUnavailableError(
@@ -450,7 +468,7 @@ def _run_docker(
         raise OcrError(f"Docker OCR failed (exit {result.returncode}): {stderr}")
 
     tsv = result.stdout.decode("utf-8", errors="replace")
-    text, confidence = parse_tsv(tsv)
+    text, confidence = _parse_tsv_confidence(tsv)
     return text, confidence, None
 
 
@@ -502,7 +520,7 @@ def run_ocr(
 
     if selected == "local":
         try:
-            text, confidence, version = _run_local(image, lang, psm)
+            text, score, version = _run_local(image, lang, psm)
         except OcrError:
             # A broken local install should not block the team: try Docker when
             # auto-selection is in play. Explicit requests still raise.
@@ -510,19 +528,22 @@ def run_ocr(
                 raise
             if not is_docker_available():
                 raise
-            text, confidence, version = _run_docker(image, lang, psm)
+            text, score, version = _run_docker(image, lang, psm)
             selected = "docker"
     else:
-        text, confidence, version = _run_docker(image, lang, psm)
+        text, score, version = _run_docker(image, lang, psm)
 
     return OcrResult(
         text=text,
-        confidence=confidence,
+        confidence=score.score,
         backend=selected,
         language=lang,
         psm=psm,
         tesseract_version=version,
         preprocessed=bool(preprocess),
+        word_count=score.word_count,
+        mean_word_confidence=score.mean_word_confidence,
+        low_confidence_ratio=score.low_confidence_ratio,
     )
 
 
