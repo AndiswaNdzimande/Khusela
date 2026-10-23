@@ -28,9 +28,11 @@ configuration and troubleshooting,
 [docs/ocr-preprocessing.md](docs/ocr-preprocessing.md) for the
 grayscale/resize/threshold pipeline,
 [docs/ocr-confidence.md](docs/ocr-confidence.md) for the confidence score and
-raw text output, and
+raw text output,
 [docs/ocr-field-extraction.md](docs/ocr-field-extraction.md) for amount,
-recipient and reference extraction.
+recipient and reference extraction, and
+[docs/ocr-phash.md](docs/ocr-phash.md) for near-duplicate screenshot detection
+and Hamming-distance threshold tuning.
 
 ## Tests
 

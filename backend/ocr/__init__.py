@@ -1,4 +1,4 @@
-"""Khusela OCR package: local Tesseract with a Docker fallback."""
+"""Khusela OCR package: local Tesseract with a Docker fallback, plus pHash."""
 
 from .confidence import (
     LOW_CONFIDENCE_THRESHOLD,
@@ -14,6 +14,21 @@ from .extract import (
     extract_recipient,
     extract_reference,
     parse_amount,
+)
+from .phash import (
+    DEFAULT_HAMMING_THRESHOLD,
+    DEFAULT_HASH_SIZE,
+    DuplicateMatch,
+    ThresholdReport,
+    closest_match,
+    evaluate_threshold,
+    find_near_duplicates,
+    hamming_distance,
+    is_near_duplicate,
+    phash,
+    phash_int,
+    tune_threshold,
+    tune_threshold_from_file,
 )
 from .preprocess import (
     PreprocessConfig,
@@ -38,6 +53,9 @@ from .tesseract_engine import (
 )
 
 __all__ = [
+    "DEFAULT_HAMMING_THRESHOLD",
+    "DEFAULT_HASH_SIZE",
+    "DuplicateMatch",
     "ExtractedFields",
     "LOW_CONFIDENCE_THRESHOLD",
     "OcrError",
@@ -46,19 +64,27 @@ __all__ = [
     "PreprocessConfig",
     "RELIABLE_CONFIDENCE_THRESHOLD",
     "ConfidenceScore",
+    "ThresholdReport",
     "available_backends",
     "build_docker_image",
+    "closest_match",
     "compute_confidence",
     "confidence_label",
     "docker_image_available",
+    "evaluate_threshold",
     "extract_amount",
     "extract_fields",
     "extract_recipient",
     "extract_reference",
+    "find_near_duplicates",
+    "hamming_distance",
     "is_docker_available",
     "is_local_available",
+    "is_near_duplicate",
     "local_tesseract_version",
     "parse_amount",
+    "phash",
+    "phash_int",
     "preprocess_bytes",
     "preprocess_image",
     "resize_for_ocr",
@@ -66,4 +92,6 @@ __all__ = [
     "select_backend",
     "threshold_image",
     "to_grayscale",
+    "tune_threshold",
+    "tune_threshold_from_file",
 ]
