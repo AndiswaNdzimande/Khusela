@@ -1,7 +1,10 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from engine.evaluate import evaluate
-from engine.ai_explainer import generate_ai_explanation
+from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
+
+from integration import UploadRejected, check_payment, reset_fingerprints
+from ocr import OcrUnavailableError
 
 app = FastAPI(title="Khusela API")
 
@@ -14,48 +17,55 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/")
 def health_check():
     return {"status": "Khusela API is running"}
 
+
+async def _check(image, expected_amount, expected_recipient, expected_reference, seller_id):
+    image_bytes = await image.read()
+    try:
+        # OCR is slow and blocking, so keep it off the event loop.
+        return await run_in_threadpool(
+            check_payment,
+            image_bytes,
+            expected_amount=expected_amount,
+            expected_recipient=expected_recipient,
+            expected_reference=expected_reference,
+            seller_id=seller_id,
+        )
+    except UploadRejected as exc:
+        return JSONResponse(status_code=400, content={"error": exc.code, "message": exc.message})
+    except OcrUnavailableError:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "ocr_unavailable",
+                     "message": "Text reading is not available. Run scripts/setup_ocr.ps1."},
+        )
+
+
+# Both paths work: the guide says /check, interfaces.md says /api/check.
 @app.post("/api/check")
-async def check_payment(
+@app.post("/check")
+async def check_endpoint(
     image: UploadFile = File(...),
     expected_amount: str = Form(...),
-    expected_recipient: str = Form(...)
+    expected_recipient: str = Form(...),
+    expected_reference: str = Form(""),
+    seller_id: str = Form("demo_seller"),  # replaced by the login token once TASK-23 exists
 ):
-    print(f"Received check request for {expected_amount} to {expected_recipient}")
-    
-    # --- MOCK OCR (Until Nyakallo merges her Tesseract code) ---
-    # We deliberately mismatch the amount to test the engine's WAIT/STOP logic
-    extracted_data = {
-        "amount": "R1,500.00",  # Fake OCR read (Mismatch)
-        "recipient": "J. Doe",   # Fake OCR read (Mismatch)
-        "ocr_confidence": 0.95
-    }
+    return await _check(image, expected_amount, expected_recipient, expected_reference, seller_id)
 
-    expected_data = {
-        "amount": expected_amount,
-        "recipient": expected_recipient
-    }
 
-    # 1. Run Ayanda's Deterministic Rule Engine
-    verdict_result = evaluate(
-        extracted=extracted_data, 
-        expected=expected_data, 
-        ocr_confidence=extracted_data["ocr_confidence"], 
-        dup_result={"found": False} # Mocking no duplicate for now
-    )
+@app.post("/api/demo/reset")
+def demo_reset():
+    """Forget every stored screenshot fingerprint (demo and testing only)."""
+    reset_fingerprints()
+    return {"status": "fingerprints cleared"}
 
-    # 2. Run Ayanda's Gemini AI Explainer
-    ai_text = generate_ai_explanation(verdict_result)
-    
-    # 3. Attach the AI text and extracted data to the response for the frontend
-    verdict_result["explanation"] = ai_text
-    verdict_result["extracted_text"] = extracted_data
-
-    return verdict_result
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
