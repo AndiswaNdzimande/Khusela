@@ -1,0 +1,26 @@
+{
+  "check_id": "chk_000003",
+  "verdict": "STOP",
+  "reasons": [
+    "duplicate_image"
+  ],
+  "explanation": "This screenshot has already been submitted by another seller, so it may be a reused fake. Do not release the goods; check your banking app.",
+  "explanation_source": "template",
+  "extracted": {
+    "amount": 1800.0,
+    "recipient": "Thabo Sneakers",
+    "reference": "SNK1800"
+  },
+  "expected": {
+    "amount": 1800.0,
+    "recipient": "Thabo Sneakers",
+    "reference": "SNK1800"
+  },
+  "ocr_confidence": 0.93,
+  "duplicate": {
+    "found": true,
+    "same_seller": false
+  },
+  "raw_ocr_text": "DEMO BANK\nPayment successful\nR1,800.00\nRecipient\nThabo Sneakers\nReference\nSNK1800",
+  "bank_reminder": "Confirm the money in your banking app before you release goods."
+}
