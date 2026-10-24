@@ -1,0 +1,24 @@
+{
+  "check_id": "chk_000001",
+  "verdict": "MATCH",
+  "reasons": [],
+  "explanation": "The amount, recipient name and reference match your sale. Check your banking app to confirm the money has arrived before you release the goods.",
+  "explanation_source": "template",
+  "extracted": {
+    "amount": 1800.0,
+    "recipient": "Thabo Sneakers",
+    "reference": "SNK1800"
+  },
+  "expected": {
+    "amount": 1800.0,
+    "recipient": "Thabo Sneakers",
+    "reference": "SNK1800"
+  },
+  "ocr_confidence": 0.94,
+  "duplicate": {
+    "found": false,
+    "same_seller": false
+  },
+  "raw_ocr_text": "DEMO BANK\nPayment successful\nR1,800.00\nRecipient\nThabo Sneakers\nReference\nSNK1800",
+  "bank_reminder": "Confirm the money in your banking app before you release goods."
+}
