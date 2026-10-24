@@ -1,0 +1,24 @@
+order,file,case,seller_id,expected_recipient,expected_amount,expected_reference,expected_verdict,expected_reasons,note
+1,m01_match.png,match,seller_a,Thabo Sneakers,1800.00,SNK1800,MATCH,,"The R1,800 sneaker sale"
+2,m02_match.png,match,seller_b,Naledi Beauty Hub,450.00,BEAUTY450,MATCH,,
+3,m03_match.png,match,seller_c,Mama Zodwa Spaza,325.50,SPAZA325,MATCH,,Amount with cents
+4,m04_match.png,match,seller_a,Thabo Sneakers,2499.00,SNK2499,MATCH,,Second layout/theme
+5,m05_match.png,match,seller_b,Naledi Beauty Hub,120.00,BEAUTY120,MATCH,,
+6,n01_wrong_name.png,wrong_name,seller_a,Thabo Sneakers,1800.00,SNK1800,WAIT,recipient_mismatch,"The scam from the pitch: amount right, name wrong"
+7,n02_wrong_name_close.png,wrong_name,seller_b,Naledi Beauty Hub,450.00,BEAUTY450,WAIT,recipient_mismatch,Near miss: shares a first name only; must NOT match
+8,n03_wrong_name.png,wrong_name,seller_c,Mama Zodwa Spaza,325.50,SPAZA325,WAIT,recipient_mismatch,
+9,a01_wrong_amount.png,wrong_amount,seller_a,Thabo Sneakers,1800.00,SNK1800,WAIT,amount_mismatch,Digits swapped
+10,a02_wrong_amount.png,wrong_amount,seller_b,Naledi Beauty Hub,450.00,BEAUTY450,WAIT,amount_mismatch,Overpayment (refund-pressure scam)
+11,a03_wrong_amount.png,wrong_amount,seller_c,Mama Zodwa Spaza,325.50,SPAZA325,WAIT,amount_mismatch,50 cents short
+12,r01_wrong_reference.png,wrong_reference,seller_a,Thabo Sneakers,1800.00,SNK1800,WAIT,reference_mismatch,"One character differs from m01, so pHash sees it as 8 bits away (a copy). Same seller, so WAIT either way"
+13,r02_wrong_reference.png,wrong_reference,seller_c,Mama Zodwa Spaza,325.50,SPAZA325,WAIT,reference_mismatch,
+14,i01_injection.png,injection,seller_a,Thabo Sneakers,1800.00,SNK1800,WAIT,amount_mismatch,Acceptance test 5: wrong amount plus injection text must stay WAIT
+15,i02_injection.png,injection,seller_b,Naledi Beauty Hub,450.00,BEAUTY450,WAIT,recipient_mismatch,Wrong name plus injection text must stay WAIT
+16,b01_blurry.png,blurry,seller_a,Thabo Sneakers,1800.00,SNK1800,WAIT,low_ocr_confidence,"Same receipt as m01, blurred; confidence must stay under 0.5. pHash also sees it as a copy of m01"
+17,b02_blurry.png,blurry,seller_c,Mama Zodwa Spaza,325.50,SPAZA325,WAIT,low_ocr_confidence,
+18,u01_reused.jpg,reused_other_seller,seller_b,Naledi Beauty Hub,450.00,BEAUTY450,STOP,duplicate_image,Near-duplicate of m01_match.png; submit after the original
+19,u02_reused.jpg,reused_other_seller,seller_c,Mama Zodwa Spaza,325.50,SPAZA325,STOP,duplicate_image,Near-duplicate of m02_match.png; submit after the original
+20,u03_reused.jpg,reused_other_seller,seller_a,Thabo Sneakers,1800.00,SNK1800,STOP,duplicate_image,Near-duplicate of m03_match.png; submit after the original
+21,d01_repeat_same_seller.png,repeat_same_seller,seller_a,Thabo Sneakers,1800.00,SNK1800,WAIT,duplicate_same_seller,Exact copy of m01_match.png sent again by the same seller
+22,x01_oversized.png,bad_upload,seller_a,Thabo Sneakers,1800.00,SNK1800,REJECT,file_too_large,Over 5 MB. Do not commit this file (it is gitignored)
+23,x02_wrong_type.txt,bad_upload,seller_a,Thabo Sneakers,1800.00,SNK1800,REJECT,unsupported_type,Not an image or PDF

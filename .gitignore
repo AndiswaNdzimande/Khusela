@@ -226,3 +226,5 @@ node_modules/
 .env
 __pycache__/
 *.db
+
+tests/fixtures/x01_oversized.png
