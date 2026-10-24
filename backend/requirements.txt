@@ -1,0 +1,11 @@
+fastapi>=0.110,<1
+uvicorn[standard]>=0.27,<1
+python-multipart>=0.0.9
+python-dotenv>=1.0
+google-genai>=1.0
+
+# OCR: Tesseract runs locally when installed, otherwise the Docker image in
+# backend/ocr is used as a fallback (see docs/ocr-setup.md).
+pytesseract>=0.3.10
+Pillow>=10.0
+numpy>=1.24
