@@ -61,7 +61,7 @@ export default function LoginPage() {
     <div className="auth-page">
       <section className="auth-art">
         <div className="auth-art-top">
-          <Logo to="/login" />
+          <Logo to="/login" variant="full" />
           <span className="auth-mode">
             <span className="mode-dot" />
             {MODE_LABEL}
@@ -96,10 +96,8 @@ export default function LoginPage() {
       </section>
 
       <section className="auth-panel">
-        <div className="auth-mobile-brand">
-          <Logo to="/login" />
-        </div>
         <div className="auth-card">
+          <Logo to="/login" className="auth-form-logo" />
           <div className="auth-card-head">
             <p className="eyebrow">Seller console</p>
             <h2>{tab === "signin" ? "Sign in to Khusela" : "Create your workspace"}</h2>
