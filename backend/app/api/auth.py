@@ -20,7 +20,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # ---------------------------------------------------------------------------
 # Config – read from environment, no hard-coded defaults for production values
 # ---------------------------------------------------------------------------
-SECRET_KEY: str = os.environ["JWT_SECRET_KEY"]          # must be set; crash loudly if not
+SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")        # validated at startup in main.py
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
 

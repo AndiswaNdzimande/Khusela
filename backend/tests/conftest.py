@@ -1,5 +1,7 @@
 """Shared pytest fixtures."""
 import os
+
+# Must be set before any app import (bug 8 fix: auth.py reads at import time)
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-only")
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_khusela.db")
 
