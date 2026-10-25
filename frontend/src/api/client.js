@@ -137,9 +137,12 @@ async function readFailure(response) {
   } catch {
     // Some failures have no JSON body.
   }
+  const detail = body.detail;
   return new ApiError(
     body.error || `http_${response.status}`,
-    body.message || "Khusela could not complete that request. Please try again.",
+    body.message ||
+      (typeof detail === "string" ? detail : "") ||
+      "Khusela could not complete that request. Please try again.",
     response.status,
   );
 }
@@ -161,51 +164,82 @@ async function request(path, options = {}) {
   return response.json();
 }
 
-export async function login(token) {
-  const cleaned = token.trim();
-  if (!cleaned) {
-    throw new ApiError("missing_token", "Enter your seller API token.");
-  }
+const AUTH_PATHS = {
+  login: ["/api/auth/login", "/auth/login"],
+  register: ["/api/auth/register", "/auth/register"],
+};
 
-  if (API_MODE === "mock") {
-    return request("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: cleaned }),
-    });
+async function requestAuth(kind, body) {
+  let lastError;
+  for (const path of AUTH_PATHS[kind]) {
+    try {
+      return await request(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      lastError = error;
+      if (error.status !== 404) throw error;
+    }
   }
+  throw lastError;
+}
 
+export function normaliseSession(raw, fallback = {}) {
+  const token = raw?.token || raw?.access_token;
+  if (!token) {
+    throw new ApiError(
+      "invalid_auth_response",
+      "The server did not return a session token. Try signing in again.",
+    );
+  }
   return {
-    token: cleaned,
-    seller_id: "live_seller",
-    business_name: "Khusela seller",
+    token,
+    seller_id: raw.seller_id || raw.id || fallback.sellerId || null,
+    business_name:
+      raw.business_name || fallback.businessName || "Khusela seller",
   };
 }
 
-export async function register({ businessName, password }) {
-  if (!businessName.trim()) {
+export async function login({ businessName, password }) {
+  const name = String(businessName || "").trim();
+  if (!name) {
     throw new ApiError("missing_business_name", "Enter your business name.");
   }
-  if (password.length < 6) {
+  if (!password) {
+    throw new ApiError("missing_password", "Enter your password.");
+  }
+
+  const raw = await requestAuth("login", {
+    business_name: name,
+    password,
+  });
+  return normaliseSession(raw, { businessName: name });
+}
+
+export async function register({ businessName, password }) {
+  const name = String(businessName || "").trim();
+  if (!name) {
+    throw new ApiError("missing_business_name", "Enter your business name.");
+  }
+  if (password.length < 8) {
     throw new ApiError(
       "weak_password",
-      "Use at least 6 characters for your password.",
+      "Use at least 8 characters for your password.",
     );
   }
 
-  if (API_MODE === "mock") {
-    return request("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ business_name: businessName.trim(), password }),
-    });
+  const raw = await requestAuth("register", {
+    business_name: name,
+    password,
+  });
+
+  if (raw?.token || raw?.access_token) {
+    return normaliseSession(raw, { businessName: name });
   }
 
-  return {
-    token: `khs_local_${Date.now().toString(36)}`,
-    seller_id: `local_${Date.now().toString(36)}`,
-    business_name: businessName.trim(),
-  };
+  return login({ businessName: name, password });
 }
 
 export async function runCheck({

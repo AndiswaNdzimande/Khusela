@@ -5,14 +5,14 @@ import Icon from "../components/Icon";
 import Logo from "../components/Logo";
 import { useAuth } from "../context/AuthContext";
 
-const DEMO_TOKEN = "khs_live_demo";
+const DEMO_BUSINESS = "Thandi's Threads";
+const DEMO_PASSWORD = "demo1234";
 
 export default function LoginPage() {
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [tab, setTab] = useState("signin");
-  const [token, setToken] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -28,7 +28,7 @@ export default function LoginPage() {
     setError("");
     setBusy(true);
     try {
-      await signIn(token);
+      await signIn({ businessName, password });
       goNext();
     } catch (err) {
       setError(err.message || "Could not sign in. Try again.");
@@ -51,10 +51,20 @@ export default function LoginPage() {
     }
   }
 
-  function useDemo() {
+  async function useDemo() {
     setTab("signin");
-    setToken(DEMO_TOKEN);
+    setBusinessName(DEMO_BUSINESS);
+    setPassword(DEMO_PASSWORD);
     setError("");
+    setBusy(true);
+    try {
+      await signIn({ businessName: DEMO_BUSINESS, password: DEMO_PASSWORD });
+      goNext();
+    } catch (err) {
+      setError(err.message || "Could not open the demo workspace. Try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -103,7 +113,7 @@ export default function LoginPage() {
             <h2>{tab === "signin" ? "Sign in to Khusela" : "Create your workspace"}</h2>
             <p>
               {tab === "signin"
-                ? "Use the seller token issued to your business."
+                ? "Sign in with the business name and password you registered."
                 : "Protect your sales with a seller workspace."}
             </p>
           </div>
@@ -145,28 +155,38 @@ export default function LoginPage() {
           {tab === "signin" ? (
             <form className="form-stack" onSubmit={handleSignIn}>
               <label className="field">
-                <span className="field-label">Seller token</span>
+                <span className="field-label">Business name</span>
                 <input
                   className="input"
-                  value={token}
-                  onChange={(event) => setToken(event.target.value)}
-                  placeholder="khs_live_••••••••"
-                  autoComplete="current-password"
-                  spellCheck="false"
+                  value={businessName}
+                  onChange={(event) => setBusinessName(event.target.value)}
+                  placeholder="e.g. Thandi's Threads"
+                  autoComplete="username"
                   required
                 />
-                <span className="field-hint">
-                  Starts with <code>khs_live_</code>. Keep it private.
-                </span>
+              </label>
+              <label className="field">
+                <span className="field-label">Password</span>
+                <input
+                  className="input"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Your password"
+                  autoComplete="current-password"
+                  required
+                />
               </label>
               <button className="button button-primary button-block" disabled={busy}>
                 {busy ? <span className="spinner" /> : <Icon name="arrowRight" size={17} />}
                 {busy ? "Signing in…" : "Sign in"}
               </button>
-              <button type="button" className="demo-token" onClick={useDemo}>
-                <Icon name="spark" size={16} />
-                Use the demo workspace token
-              </button>
+              {API_MODE === "mock" && (
+                <button type="button" className="demo-token" onClick={useDemo} disabled={busy}>
+                  <Icon name="spark" size={16} />
+                  Open the demo workspace
+                </button>
+              )}
             </form>
           ) : (
             <form className="form-stack" onSubmit={handleRegister}>
@@ -188,9 +208,9 @@ export default function LoginPage() {
                   type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  placeholder="At least 6 characters"
+                  placeholder="At least 8 characters"
                   autoComplete="new-password"
-                  minLength={6}
+                  minLength={8}
                   required
                 />
               </label>
@@ -200,7 +220,7 @@ export default function LoginPage() {
               </button>
               <p className="field-hint center">
                 {API_MODE === "live"
-                  ? "The auth endpoints are not merged yet. This creates a local live-mode session and still sends checks to the API."
+                  ? "Your workspace is created on the live API, then your checks use its session token."
                   : "The mock stores this seller in the local json-server database."}
               </p>
             </form>

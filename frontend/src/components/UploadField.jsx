@@ -77,7 +77,7 @@ export default function UploadField({ file, onFile, error, onError }) {
             </span>
             <span className="upload-copy">
               <strong>Drop the payment screenshot here</strong>
-              <span>or tap to choose a file · JPG, PNG or WebP · max 5 MB</span>
+              <span>or tap to choose a file · JPG or PNG · max 5 MB</span>
             </span>
             <span className="button button-secondary button-sm upload-button">
               Choose file
