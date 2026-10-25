@@ -1,4 +1,7 @@
-from fastapi import FastAPI, File, Form, UploadFile
+import hmac
+import os
+
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
@@ -59,8 +62,17 @@ async def check_endpoint(
 
 
 @app.post("/api/demo/reset")
-def demo_reset():
-    """Forget every stored screenshot fingerprint (demo and testing only)."""
+def demo_reset(x_demo_key: str = Header(default="")):
+    """Forget every stored screenshot fingerprint (demo and testing only).
+
+    Locked: the endpoint does not exist (404) unless KHUSELA_DEMO_KEY is set,
+    and then the caller must send the same value in the X-Demo-Key header.
+    """
+    expected = os.getenv("KHUSELA_DEMO_KEY", "")
+    if not expected:
+        raise HTTPException(status_code=404, detail="Not found")
+    if not hmac.compare_digest(x_demo_key.encode(), expected.encode()):
+        raise HTTPException(status_code=403, detail="Forbidden")
     reset_fingerprints()
     return {"status": "fingerprints cleared"}
 
