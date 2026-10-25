@@ -7,22 +7,30 @@ milestone: MVP
 Raw uploaded images must not be kept longer than 24 hours. A scheduled job deletes them, leaving only fingerprints and verdict metadata.
 
 ## Requirements
-- [ ] Record the upload time for every stored raw file
-- [ ] Scheduled job (APScheduler or equivalent) runs on a fixed interval, e.g. every 15 minutes
-- [ ] Deletes raw files older than 24 hours from disk
-- [ ] Fingerprints and check records are kept
-- [ ] Retention period (24h) and job interval configurable via environment variables
-- [ ] Logs the count of deleted files, never file contents or seller data
-- [ ] Safe to run repeatedly (idempotent) and tolerant of already-missing files
+- [x] `Check.raw_file_uploaded_at` records the upload time for every stored raw file
+- [x] `Check.raw_file_path` stores the path; cleared to `NULL` after deletion
+- [x] Scheduled job (APScheduler `BackgroundScheduler`) runs on a fixed interval (default every 15 minutes)
+- [x] Deletes raw files older than 24 hours from disk
+- [x] Fingerprint and Check rows are kept after deletion
+- [x] Retention period (`RAW_IMAGE_RETENTION_HOURS`) and job interval (`DELETION_JOB_INTERVAL_MINUTES`) configurable via environment variables
+- [x] Logs the count of deleted files — never file contents or seller data
+- [x] Idempotent: already-missing files are silently skipped; exceptions are caught and logged without crashing the API
 
 ## Acceptance criteria
-- [ ] Test with a file older than 24h: deleted
-- [ ] Test with a file younger than 24h: kept
-- [ ] Fingerprint rows remain after deletion
-- [ ] Job starts with the app and a failure does not crash the API
+- [x] Test: file older than 24h → deleted (`tests/test_task26_scheduler.py`)
+- [x] Test: file younger than 24h → kept
+- [x] Test: Fingerprint rows remain after deletion
+- [x] Job starts with the app (`app/main.py` startup event) and a failure does not crash the API
+
+## Implementation notes
+- Module: `backend/app/scheduler.py`
+- `delete_expired_raw_files()` — core deletion function, called by APScheduler
+- `start_scheduler()` — creates and starts the scheduler; returns it so `main.py` can shut it down cleanly
+- Raw files are stored in `RAW_UPLOAD_DIR` (default `./uploads/raw`)
+- Scheduler uses UTC timezone
 
 ## Notes
-Supports data-minimisation (POPIA).
+Supports data-minimisation under POPIA.
 
 ## Dependencies
 Depends on #22 and #24.
