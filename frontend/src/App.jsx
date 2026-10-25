@@ -12,7 +12,10 @@ function ProtectedLayout() {
   const location = useLocation();
 
   if (!session) {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+    const from = location.pathname.startsWith("/result/")
+      ? undefined
+      : location.pathname;
+    return <Navigate to="/login" replace state={from ? { from } : undefined} />;
   }
 
   return <Layout />;

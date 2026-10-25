@@ -1,5 +1,9 @@
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
-import { login as loginRequest, register as registerRequest } from "../api/client";
+import {
+  clearLocalHistory,
+  login as loginRequest,
+  register as registerRequest,
+} from "../api/client";
 
 const SESSION_KEY = "khusela.session.v1";
 const AuthContext = createContext(null);
@@ -26,8 +30,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const signIn = useCallback(
-    async (token) => {
-      const next = await loginRequest(token);
+    async ({ businessName, password }) => {
+      const next = await loginRequest({ businessName, password });
       persist(next);
       return next;
     },
@@ -43,7 +47,10 @@ export function AuthProvider({ children }) {
     [persist],
   );
 
-  const signOut = useCallback(() => persist(null), [persist]);
+  const signOut = useCallback(() => {
+    clearLocalHistory();
+    persist(null);
+  }, [persist]);
 
   const value = useMemo(
     () => ({ session, signIn, signUp, signOut }),

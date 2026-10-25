@@ -7,7 +7,7 @@ const router = jsonServer.router(path.join(__dirname, "db.json"));
 const middlewares = jsonServer.defaults();
 
 const MAX_BYTES = 5 * 1024 * 1024;
-const ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const ALLOWED_TYPES = new Set(["image/png", "image/jpeg"]);
 const DELAY_MS = 700;
 
 const upload = multer({
@@ -114,12 +114,21 @@ function buildVerdict(req) {
 }
 
 server.post("/api/auth/login", (req, res) => {
-  const token = String(req.body.token || "").trim();
-  const seller = router.db.get("sellers").find({ auth_token: token }).value();
+  const businessName = String(req.body.business_name || "").trim();
+  const password = String(req.body.password || "");
+  const seller = router.db
+    .get("sellers")
+    .find(
+      (item) =>
+        item.business_name.toLowerCase() === businessName.toLowerCase() &&
+        item.password === password,
+    )
+    .value();
+
   if (!seller) {
     return res.status(401).json({
-      error: "invalid_token",
-      message: "That token is not linked to a seller. Use khs_live_demo for the demo workspace.",
+      error: "invalid_credentials",
+      message: "That business name or password is not correct.",
     });
   }
   return res.json({
@@ -139,10 +148,10 @@ server.post("/api/auth/register", (req, res) => {
       message: "Enter your business name.",
     });
   }
-  if (password.length < 6) {
+  if (password.length < 8) {
     return res.status(400).json({
       error: "weak_password",
-      message: "Use at least 6 characters for your password.",
+      message: "Use at least 8 characters for your password.",
     });
   }
 
@@ -154,7 +163,7 @@ server.post("/api/auth/register", (req, res) => {
   if (existing) {
     return res.status(409).json({
       error: "business_exists",
-      message: "That business already has a workspace. Sign in with its token instead.",
+      message: "That business already has a workspace. Sign in with its password instead.",
     });
   }
 
@@ -186,7 +195,7 @@ server.post("/api/check", (req, res) => {
         error: tooLarge ? "file_too_large" : "unsupported_type",
         message: tooLarge
           ? "Images must be 5 MB or smaller."
-          : "Upload a JPG, PNG or WebP screenshot.",
+          : "Upload a JPG or PNG screenshot.",
       });
     }
 
@@ -208,7 +217,7 @@ server.post("/api/check", (req, res) => {
     if (!ALLOWED_TYPES.has(req.file.mimetype)) {
       return res.status(400).json({
         error: "unsupported_type",
-        message: "Upload a JPG, PNG or WebP screenshot.",
+        message: "Upload a JPG or PNG screenshot.",
       });
     }
 
