@@ -4,25 +4,33 @@ labels: ["enhancement", "backend", "privacy"]
 milestone: MVP
 ---
 ## Summary
-Raw uploaded images must not be kept longer than 24 hours. A scheduled job deletes them, leaving only fingerprints and verdict metadata.
+A scheduled job deletes raw files older than 24 hours, leaving only fingerprints and verdict metadata.
 
 ## Requirements
-- [ ] Record the upload time for every stored raw file
-- [ ] Scheduled job (APScheduler or equivalent) runs on a fixed interval, e.g. every 15 minutes
-- [ ] Deletes raw files older than 24 hours from disk
-- [ ] Fingerprints and check records are kept
-- [ ] Retention period (24h) and job interval configurable via environment variables
-- [ ] Logs the count of deleted files, never file contents or seller data
-- [ ] Safe to run repeatedly (idempotent) and tolerant of already-missing files
+- [x] `Check.raw_file_uploaded_at` records upload time; `raw_file_path` cleared after deletion
+- [x] APScheduler `BackgroundScheduler` runs on a configurable interval (default 15 min)
+- [x] Deletes raw files older than `RAW_IMAGE_RETENTION_HOURS` (default 24)
+- [x] Fingerprint and Check rows kept after deletion
+- [x] Logs count of deleted files only — never file contents or seller data
+- [x] Idempotent: already-missing files silently skipped; exceptions caught without crashing API
+
+## Bug fixes (v4 report)
+- [x] **Bug 7 (MEDIUM):** `/check` was writing every upload to disk for 24h, contradicting the "nothing stored" privacy story. Fixed: `/check` no longer stores raw files. The scheduler remains available but is **off by default** (`START_SCHEDULER=0`). Set `START_SCHEDULER=1` to enable it only if raw storage is intentionally used.
 
 ## Acceptance criteria
-- [ ] Test with a file older than 24h: deleted
-- [ ] Test with a file younger than 24h: kept
-- [ ] Fingerprint rows remain after deletion
-- [ ] Job starts with the app and a failure does not crash the API
+- [x] Test: file older than 24h → deleted
+- [x] Test: file younger than 24h → kept
+- [x] Test: Fingerprint rows survive deletion
+- [x] Scheduler starts when `START_SCHEDULER=1` and does not crash the API on failure
+(`tests/test_task26_scheduler.py`)
+
+## Implementation notes
+- Module: `backend/app/scheduler.py`
+- Scheduler is started in `main.py` only when `START_SCHEDULER=1`
+- `RAW_IMAGE_RETENTION_HOURS` and `DELETION_JOB_INTERVAL_MINUTES` configurable via `.env`
 
 ## Notes
-Supports data-minimisation (POPIA).
+Supports data-minimisation under POPIA.
 
 ## Dependencies
 Depends on #22 and #24.

@@ -6,16 +6,14 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Boolean,
+    BigInteger,
     Column,
     DateTime,
     Float,
     ForeignKey,
     Index,
-    Integer,
     JSON,
     String,
-    Text,
 )
 from sqlalchemy.orm import relationship
 
@@ -94,7 +92,7 @@ class Fingerprint(Base):
         String, ForeignKey("checks.id", ondelete="CASCADE"), nullable=False
     )
     hash = Column(String, nullable=False)           # hex string of the perceptual hash
-    hash_int = Column(Integer, nullable=True)       # integer for Hamming distance queries
+    hash_int = Column(BigInteger, nullable=True)    # signed int64 for Hamming distance queries
     created_at = Column(DateTime(timezone=True), default=_now, nullable=False)
 
     seller = relationship("Seller", back_populates="fingerprints")

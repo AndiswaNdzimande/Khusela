@@ -1,20 +1,32 @@
 """
-TASK-21 + TASK-24 + TASK-25: POST /check endpoint.
+TASK-21 + TASK-24 + TASK-25: POST /check and GET /health endpoints.
 Requires a valid Bearer token (TASK-23).
-Pipeline:
-  1. validate_upload  – size, MIME, parse check        (TASK-24)
-  2. compute fingerprint                                (TASK-25)
-  3. find_duplicates from other sellers                 (TASK-25)
-  4. call the existing engine.evaluate                  (existing code)
-  5. persist Check + Fingerprint rows                   (TASK-22)
-  6. store raw file temporarily; scheduler cleans up    (TASK-26)
-"""
-import os
-import uuid
-from datetime import datetime, timezone
-from pathlib import Path
 
-from fastapi import APIRouter, Depends, UploadFile, File, Form
+Pipeline:
+  1. validate_upload   – size cap, magic-byte MIME, Pillow parse   (TASK-24)
+  2. compute pHash fingerprint                                       (TASK-25)
+  3. find_duplicates   – all sellers, with same_seller flag          (TASK-25)
+  4. call integration.check_payment (the real pipeline)              (TASK-05)
+     Falls back to a labelled stub if integration is not on sys.path.
+  5. persist Check + Fingerprint rows                                (TASK-22)
+
+Bug fixes (v4 report):
+  Bug 3: _run_engine called `from engine import evaluate` (gets the module,
+         not the function), passed wrong kwarg name (duplicate= vs dup_result=),
+         read OCR result as dict (it is an object), hard-coded same_seller=False,
+         only caught ImportError so TypeError → 500.
+         Fix: call integration.check_payment which already handles the engine
+         correctly. Catch all exceptions, not just ImportError.
+  Bug 7: /check previously wrote every upload to ./uploads/raw, contradicting
+         the privacy story ("nothing stored").
+         Fix: raw bytes are never written to disk. The scheduler is still
+         available for teams that choose to store files, but /check does not use it.
+  Field rename: frontend sends field name 'image', not 'file' (report bug 4).
+"""
+import logging
+from typing import Optional
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_seller
@@ -22,14 +34,14 @@ from app.api.safety import validate_upload
 from app.db.database import get_db
 from app.db.fingerprints import (
     compute_image_hash,
-    compute_pdf_hash,
+    dup_result,
     find_duplicates,
     save_fingerprint,
 )
 from app.db.models import Check, Seller
 from app.schemas.check import CheckResponse, HealthResponse
 
-RAW_UPLOAD_DIR = Path(os.getenv("RAW_UPLOAD_DIR", "./uploads/raw"))
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["check"])
 
@@ -40,8 +52,9 @@ def health():
 
 
 @router.post("/check", response_model=CheckResponse)
-async def check(
-    file: UploadFile = File(...),
+async def check_endpoint(
+    # Frontend sends field name 'image' (bug 4 fix)
+    image: UploadFile = File(...),
     expected_amount: float = Form(...),
     expected_recipient: str = Form(...),
     expected_reference: str = Form(...),
@@ -49,65 +62,48 @@ async def check(
     seller: Seller = Depends(get_current_seller),
 ):
     # ------------------------------------------------------------------ #
-    # 1. Safety gate                                                       #
+    # 1. Safety gate – size, MIME, Pillow parse                           #
     # ------------------------------------------------------------------ #
-    raw_bytes, mime_type = await validate_upload(file)
+    raw_bytes, mime_type = await validate_upload(image)
 
     # ------------------------------------------------------------------ #
-    # 2. Persist raw file temporarily (deleted by scheduler after 24 h)   #
+    # 2. Compute fingerprint (overflow-safe signed int)                   #
     # ------------------------------------------------------------------ #
-    RAW_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    ext = "pdf" if mime_type == "application/pdf" else mime_type.split("/")[1]
-    raw_filename = f"{uuid.uuid4()}.{ext}"
-    raw_path = RAW_UPLOAD_DIR / raw_filename
-    raw_path.write_bytes(raw_bytes)
-    upload_time = datetime.now(timezone.utc)
+    hash_hex, hash_int = compute_image_hash(raw_bytes)
 
     # ------------------------------------------------------------------ #
-    # 3. Compute fingerprint                                               #
+    # 3. Duplicate lookup – returns all matches with same_seller flag     #
     # ------------------------------------------------------------------ #
-    if mime_type == "application/pdf":
-        hash_hex, hash_int = compute_pdf_hash(raw_bytes)
-    else:
-        hash_hex, hash_int = compute_image_hash(raw_bytes)
+    matches = find_duplicates(db, hash_int, seller.id)
+    dup = dup_result(matches)          # {"found": bool, "same_seller": bool}
+    is_duplicate = dup["found"]
 
     # ------------------------------------------------------------------ #
-    # 4. Cross-seller duplicate lookup                                     #
+    # 4. Run the real pipeline via integration.check_payment              #
     # ------------------------------------------------------------------ #
-    dup_matches = find_duplicates(db, hash_int, seller.id)
-    is_duplicate = len(dup_matches) > 0
-
-    # ------------------------------------------------------------------ #
-    # 5. Call the existing rule engine (or stub if not available)          #
-    # ------------------------------------------------------------------ #
-    verdict, reasons, explanation, confidence, raw_ocr_text, extracted = _run_engine(
+    verdict, reasons, explanation, confidence, raw_ocr_text, extracted = _run_pipeline(
         raw_bytes=raw_bytes,
-        mime_type=mime_type,
         expected_amount=expected_amount,
         expected_recipient=expected_recipient,
         expected_reference=expected_reference,
-        is_duplicate=is_duplicate,
+        dup=dup,
         seller_id=seller.id,
     )
 
     # ------------------------------------------------------------------ #
-    # 6. Persist Check row                                                 #
+    # 5. Persist Check row (no raw file stored – privacy compliant)       #
     # ------------------------------------------------------------------ #
     check_row = Check(
         seller_id=seller.id,
         verdict=verdict,
         reasons=reasons,
-        raw_file_path=str(raw_path),
-        raw_file_uploaded_at=upload_time,
+        raw_file_path=None,
+        raw_file_uploaded_at=None,
     )
     db.add(check_row)
-    db.flush()  # get check_row.id without committing yet
+    db.flush()
 
-    # ------------------------------------------------------------------ #
-    # 7. Persist Fingerprint row                                           #
-    # ------------------------------------------------------------------ #
     save_fingerprint(db, seller.id, check_row.id, hash_hex, hash_int)
-
     db.commit()
     db.refresh(check_row)
 
@@ -124,55 +120,57 @@ async def check(
             "recipient": expected_recipient,
             "reference": expected_reference,
         },
-        duplicate={"found": is_duplicate, "matches": len(dup_matches)},
+        duplicate={
+            "found": dup["found"],
+            "same_seller": dup["same_seller"],
+            "matches": len(matches),
+        },
         raw_ocr_text=raw_ocr_text,
-        explanation_source="engine",
+        explanation_source="engine" if raw_ocr_text else "stub",
     )
 
 
-# --------------------------------------------------------------------------- #
-# Engine bridge – calls the existing backend engine if available,             #
-# falls back to a labelled stub so the API stays runnable without it.         #
-# --------------------------------------------------------------------------- #
-def _run_engine(
+# ---------------------------------------------------------------------------
+# Pipeline bridge
+# Bug 3 fix: call integration.check_payment, not engine.evaluate directly.
+# Catches ALL exceptions (not just ImportError) so TypeError never → 500.
+# ---------------------------------------------------------------------------
+def _run_pipeline(
     raw_bytes: bytes,
-    mime_type: str,
     expected_amount: float,
     expected_recipient: str,
     expected_reference: str,
-    is_duplicate: bool,
+    dup: dict,
     seller_id: str,
 ) -> tuple:
     try:
-        from engine import evaluate  # existing module in backend/
-        from ocr import run_ocr, extract_fields
+        import integration  # backend/integration.py
 
-        ocr_result = run_ocr(raw_bytes)
-        fields = extract_fields(ocr_result.get("text", ""))
-        result = evaluate(
-            extracted=fields,
+        result = integration.check_payment(
+            image_bytes=raw_bytes,
             expected={
                 "amount": expected_amount,
                 "recipient": expected_recipient,
                 "reference": expected_reference,
             },
-            duplicate={"found": is_duplicate, "same_seller": False},
-            ocr_confidence=ocr_result.get("confidence", 0.0),
+            dup_result=dup,
+            seller_id=seller_id,
         )
         return (
             result["verdict"],
             result["reasons"],
             result.get("explanation", ""),
             result.get("confidence"),
-            ocr_result.get("text"),
-            fields,
+            result.get("raw_ocr_text"),
+            result.get("extracted", {}),
         )
-    except ImportError:
-        # Engine not on sys.path yet – return an honest stub
+    except Exception as exc:
+        # Log the real error so it is visible in the server log
+        logger.warning("Pipeline unavailable (%s: %s) — returning stub.", type(exc).__name__, exc)
         return (
             "WAIT",
             ["engine_unavailable"],
-            "Engine modules not connected yet. Results are a stub.",
+            "Pipeline not connected yet. This is a stub verdict.",
             None,
             None,
             {},
