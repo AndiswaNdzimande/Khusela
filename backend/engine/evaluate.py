@@ -4,24 +4,42 @@ from .templates import get_template
 def normalize_amount(amount_str: str) -> float:
     if not amount_str:
         return 0.0
+
     # Remove everything except digits, commas, and periods
     clean_str = re.sub(r'[^\d,.]', '', str(amount_str))
-    # Handle South African comma decimals (e.g., 1800,00 -> 1800.00)
-    clean_str = clean_str.replace(',', '.')
+
+    if ',' in clean_str and '.' in clean_str:
+        # Both exist. Whichever is LAST is the decimal separator.
+        if clean_str.rfind(',') > clean_str.rfind('.'):
+            # European: 1.800,00
+            clean_str = clean_str.replace('.', '').replace(',', '.')
+        else:
+            # SA/UK: 1,800.00 or 1,234,567.89
+            clean_str = clean_str.replace(',', '')
+
+    elif ',' in clean_str:
+        # Only comma exists. Is it a decimal (1800,00) or thousands (R1,800)?
+        if clean_str.count(',') == 1 and len(clean_str.split(',')[-1]) == 3:
+            clean_str = clean_str.replace(',', '')   # "1,800" -> 1800
+        else:
+            clean_str = clean_str.replace(',', '.')  # "1800,00" -> 1800.00
+
     try:
         return float(clean_str)
     except ValueError:
         return 0.0
+
 
 def normalize_name(name_str: str) -> str:
     if not name_str:
         return ""
     return re.sub(r'[^a-z0-9]', '', str(name_str).lower())
 
+
 def evaluate(extracted: dict, expected: dict, ocr_confidence: float, dup_result: dict) -> dict:
     reasons = []
     verdict = "MATCH"
-    
+
     is_duplicate = dup_result.get("found", False)
     same_seller = dup_result.get("same_seller", False)
 
@@ -65,11 +83,11 @@ def evaluate(extracted: dict, expected: dict, ocr_confidence: float, dup_result:
     if expected_name and expected_name != extracted_name:
         verdict = "WAIT"
         reasons.append("recipient_mismatch")
-        
+
     # 6. REFERENCE MATCHING (NEW)
     expected_ref = normalize_name(expected.get("reference"))
     extracted_ref = normalize_name(extracted.get("reference"))
-    
+
     if expected_ref and expected_ref != extracted_ref:
         verdict = "WAIT"
         reasons.append("reference_mismatch")

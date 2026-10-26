@@ -18,7 +18,7 @@ def generate_ai_explanation(verdict_result: dict) -> str:
         return template_fallback
 
     prompt = f"""
-    You are Khusela, a helpful assistant for South African small business owners.
+    You are Khuzeka, a helpful AI security assistant for South African small business owners.
     We have just run a safety check on a payment screenshot.
 
     The deterministic verdict is: {verdict}
@@ -29,7 +29,9 @@ def generate_ai_explanation(verdict_result: dict) -> str:
     If the verdict is WAIT, tell them to verify the funds in their bank app.
     If the verdict is MATCH, remind them to still check their bank app.
 
-    Do not change the verdict. Do not add new rules. Keep it under 40 words.
+    Then, add a third sentence starting with "Tip: " that gives them one specific piece of advice to avoid this scam next time.
+
+    Do not change the verdict. Do not add new rules. Keep it under 50 words.
     """
 
     try:
