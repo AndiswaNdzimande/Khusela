@@ -1,0 +1,182 @@
+[
+  {
+    "id": "capitec_comma_amount",
+    "text": "Payment sent\nAmount: R1,800.00\nTo: Thabo Sneakers\nReference: SNK1800",
+    "expected": {
+      "amount": 1800.0,
+      "recipient": "Thabo Sneakers",
+      "reference": "SNK1800"
+    }
+  },
+  {
+    "id": "fnb_spaced_amount",
+    "text": "FNB PAY\nPaid R 1 800.00\nTo THABO SNEAKERS\nRef: SNK1800",
+    "expected": {
+      "amount": 1800.0,
+      "recipient": "THABO SNEAKERS",
+      "reference": "SNK1800"
+    }
+  },
+  {
+    "id": "standard_bank_no_cents",
+    "text": "Transfer successful\nBeneficiary: Ndlovu & Sons\nAmount: R1 800\nReference: INV-2026/17",
+    "expected": {
+      "amount": 1800.0,
+      "recipient": "Ndlovu & Sons",
+      "reference": "INV-2026/17"
+    }
+  },
+  {
+    "id": "tyme_inline_paid",
+    "text": "You paid R1,800.00 to Thabo Sneakers\nReference SNK1800",
+    "expected": {
+      "amount": 1800.0,
+      "recipient": "Thabo Sneakers",
+      "reference": "SNK1800"
+    }
+  },
+  {
+    "id": "absa_zar_suffix",
+    "text": "PAYMENT NOTIFICATION\nAmount: 1800.00 ZAR\nRecipient: Thabo Sneakers\nPayment reference: SNK1800",
+    "expected": {
+      "amount": 1800.0,
+      "recipient": "Thabo Sneakers",
+      "reference": "SNK1800"
+    }
+  },
+  {
+    "id": "nedbank_payment_to",
+    "text": "Payment to: Thabo Sneakers\nAmount: R1 800.00\nReference: SNK1800",
+    "expected": {
+      "amount": 1800.0,
+      "recipient": "Thabo Sneakers",
+      "reference": "SNK1800"
+    }
+  },
+  {
+    "id": "plain_decimal_amount",
+    "text": "Payment confirmation\nAmount: 1800.00\nBeneficiary: Thabo Sneakers\nReference: SNK1800",
+    "expected": {
+      "amount": 1800.0,
+      "recipient": "Thabo Sneakers",
+      "reference": "SNK1800"
+    }
+  },
+  {
+    "id": "recipient_and_reference_on_next_line",
+    "text": "Payment details\nAmount: R1,800.00\nTo\nThabo Sneakers\nReference\nSNK1800",
+    "expected": {
+      "amount": 1800.0,
+      "recipient": "Thabo Sneakers",
+      "reference": "SNK1800"
+    }
+  },
+  {
+    "id": "fee_and_balance_are_not_the_amount",
+    "text": "Amount: R1,800.00\nFee: R0.00\nBalance: R25,000.00\nPaid to: Thabo Sneakers\nReference: SNK1800",
+    "expected": {
+      "amount": 1800.0,
+      "recipient": "Thabo Sneakers",
+      "reference": "SNK1800"
+    }
+  },
+  {
+    "id": "reference_with_space_and_date",
+    "text": "Total: R1,800.00\nPaid to Thabo Sneakers\nRef No: SNK 1800\nDate: 23 Oct 2026",
+    "expected": {
+      "amount": 1800.0,
+      "recipient": "Thabo Sneakers",
+      "reference": "SNK1800"
+    }
+  },
+  {
+    "id": "company_with_pty_and_decimal_cents",
+    "text": "Payment sent\nAmount: R2 450.50\nBeneficiary Name: Maseko Trading (Pty) Ltd\nReference: MTL-2026-0042",
+    "expected": {
+      "amount": 2450.5,
+      "recipient": "Maseko Trading (Pty) Ltd",
+      "reference": "MTL-2026-0042"
+    }
+  },
+  {
+    "id": "comma_decimal_amount",
+    "text": "Payment sent\nAmount: R 1 800,00\nTo: Thabo Sneakers\nRef: SNK1800",
+    "expected": {
+      "amount": 1800.0,
+      "recipient": "Thabo Sneakers",
+      "reference": "SNK1800"
+    }
+  },
+  {
+    "id": "no_reference",
+    "text": "Amount: R1,800.00\nTo: Thabo Sneakers",
+    "expected": {
+      "amount": 1800.0,
+      "recipient": "Thabo Sneakers",
+      "reference": null
+    }
+  },
+  {
+    "id": "reference_that_looks_like_an_amount",
+    "text": "Payment to: Thabo Sneakers\nReference: 1800.00",
+    "expected": {
+      "amount": null,
+      "recipient": "Thabo Sneakers",
+      "reference": "1800.00"
+    }
+  },
+  {
+    "id": "date_is_not_an_amount",
+    "text": "Paid to: Thabo Sneakers\nDate: 23 October 2026\nReference: SNK1800",
+    "expected": {
+      "amount": null,
+      "recipient": "Thabo Sneakers",
+      "reference": "SNK1800"
+    }
+  },
+  {
+    "id": "phone_number_is_not_an_amount",
+    "text": "Paid to: Thabo Sneakers\nPhone: 082 123 4567\nReference: SNK1800",
+    "expected": {
+      "amount": null,
+      "recipient": "Thabo Sneakers",
+      "reference": "SNK1800"
+    }
+  },
+  {
+    "id": "payment_of_amount_to_recipient",
+    "text": "Payment of R1,800.00 to Thabo Sneakers\nReference: SNK1800",
+    "expected": {
+      "amount": 1800.0,
+      "recipient": "Thabo Sneakers",
+      "reference": "SNK1800"
+    }
+  },
+  {
+    "id": "recipient_and_reference_share_a_line",
+    "text": "TO: THABO SNEAKERS Reference: SNK1800\nAmount: R1,800.00",
+    "expected": {
+      "amount": 1800.0,
+      "recipient": "THABO SNEAKERS",
+      "reference": "SNK1800"
+    }
+  },
+  {
+    "id": "payee_and_transaction_id",
+    "text": "Amount due: R 1 800.00\nPayee: Thabo Sneakers\nTransaction ID: TXN-99881",
+    "expected": {
+      "amount": 1800.0,
+      "recipient": "Thabo Sneakers",
+      "reference": "TXN-99881"
+    }
+  },
+  {
+    "id": "capitalised_labels",
+    "text": "AMOUNT: R1,800.00\nBENEFICIARY: THABO SNEAKERS\nREFERENCE: SNK1800",
+    "expected": {
+      "amount": 1800.0,
+      "recipient": "THABO SNEAKERS",
+      "reference": "SNK1800"
+    }
+  }
+]
