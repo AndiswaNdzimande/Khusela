@@ -92,7 +92,8 @@ class Fingerprint(Base):
         String, ForeignKey("checks.id", ondelete="CASCADE"), nullable=False
     )
     hash = Column(String, nullable=False)           # hex string of the perceptual hash
-    hash_int = Column(BigInteger, nullable=True)    # signed int64 for Hamming distance queries
+    hash_int = Column(BigInteger, nullable=True)    # signed int64 (None for 1024-bit hashes)
+    hash_algo = Column(String, nullable=False, default="phash64", index=True)  # NEW: tracks algorithm
     created_at = Column(DateTime(timezone=True), default=_now, nullable=False)
 
     seller = relationship("Seller", back_populates="fingerprints")

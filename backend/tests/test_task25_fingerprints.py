@@ -9,6 +9,9 @@ Cases:
   B. Same image uploaded twice by seller A   → flagged, same_seller=True (not STOP)
   C. Slightly resized copy                   → still detected
   D. Unrelated image                         → not flagged
+
+N1 fix (v5): compute_image_hash / find_duplicates / save_fingerprint all
+carry `hash_algo`. Tests pass it through every layer.
 """
 import io
 import uuid
@@ -60,15 +63,21 @@ def _check(db, seller_id):
 # Bug 1: overflow test — large uint64 hashes must not raise
 # ---------------------------------------------------------------------------
 def test_no_overflow_on_large_hash():
-    """All pHash integers must fit in SQLite signed int64."""
+    """All pHash integers must fit in SQLite signed int64 (or be NULL on 1024-bit path)."""
     db = _Session()
     s = _seller(db)
     c = _check(db, s.id)
-    hex_h, int_h = compute_image_hash(_img("green"))
+    hex_h, int_h, algo = compute_image_hash(_img("green"))
     # Must not raise OverflowError
-    fp = save_fingerprint(db, s.id, c.id, hex_h, int_h)
+    fp = save_fingerprint(db, s.id, c.id, hex_h, int_h, algo)
     assert fp.id is not None
-    assert -_INT64_OFFSET <= fp.hash_int < _INT64_OFFSET
+    if int_h is not None:
+        # phash64 / pdf_sha path — must fit in signed int64
+        assert -_INT64_OFFSET <= fp.hash_int < _INT64_OFFSET
+    else:
+        # phash1024 path — int is intentionally NULL
+        assert fp.hash_int is None
+    assert fp.hash_algo == algo
     db.close()
 
 
@@ -80,9 +89,9 @@ def test_cross_seller_flagged():
     sa = _seller(db)
     sb = _seller(db)
     img = _img("orange")
-    hx, hi = compute_image_hash(img)
-    save_fingerprint(db, sa.id, _check(db, sa.id).id, hx, hi)
-    matches = find_duplicates(db, hi, sb.id)
+    hx, hi, algo = compute_image_hash(img)
+    save_fingerprint(db, sa.id, _check(db, sa.id).id, hx, hi, algo)
+    matches = find_duplicates(db, hx, algo, sb.id)
     dr = dup_result(matches)
     assert dr["found"] is True
     assert dr["same_seller"] is False
@@ -96,9 +105,9 @@ def test_same_seller_flagged_as_same():
     db = _Session()
     s = _seller(db)
     img = _img("blue")
-    hx, hi = compute_image_hash(img)
-    save_fingerprint(db, s.id, _check(db, s.id).id, hx, hi)
-    matches = find_duplicates(db, hi, s.id)
+    hx, hi, algo = compute_image_hash(img)
+    save_fingerprint(db, s.id, _check(db, s.id).id, hx, hi, algo)
+    matches = find_duplicates(db, hx, algo, s.id)
     dr = dup_result(matches)
     assert dr["found"] is True
     assert dr["same_seller"] is True
@@ -114,10 +123,10 @@ def test_resized_copy_detected():
     sb = _seller(db)
     orig = _img("purple", (100, 100))
     resized = _img("purple", (95, 95))
-    hx, hi = compute_image_hash(orig)
-    save_fingerprint(db, sa.id, _check(db, sa.id).id, hx, hi)
-    hx2, hi2 = compute_image_hash(resized)
-    matches = find_duplicates(db, hi2, sb.id)
+    hx, hi, algo = compute_image_hash(orig)
+    save_fingerprint(db, sa.id, _check(db, sa.id).id, hx, hi, algo)
+    hx2, hi2, algo2 = compute_image_hash(resized)
+    matches = find_duplicates(db, hx2, algo2, sb.id)
     dr = dup_result(matches)
     assert dr["found"] is True
     db.close()
@@ -130,10 +139,10 @@ def test_unrelated_not_flagged():
     db = _Session()
     sa = _seller(db)
     sb = _seller(db)
-    hx_a, hi_a = compute_image_hash(_img("red", (100, 100)))
-    save_fingerprint(db, sa.id, _check(db, sa.id).id, hx_a, hi_a)
-    hx_b, hi_b = compute_image_hash(_img("cyan", (100, 100)))
-    matches = find_duplicates(db, hi_b, sb.id)
+    hx_a, hi_a, algo_a = compute_image_hash(_img("red", (100, 100)))
+    save_fingerprint(db, sa.id, _check(db, sa.id).id, hx_a, hi_a, algo_a)
+    hx_b, hi_b, algo_b = compute_image_hash(_img("cyan", (100, 100)))
+    matches = find_duplicates(db, hx_b, algo_b, sb.id)
     dr = dup_result(matches)
     assert dr["found"] is False
     db.close()
