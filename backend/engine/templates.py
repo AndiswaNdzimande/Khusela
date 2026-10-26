@@ -4,7 +4,7 @@ TEMPLATES = {
     "MATCH": "The visible details match your expected sale. However, you must confirm the funds are in your banking app before releasing goods.",
     "WAIT_AMOUNT": "The amount visible on the screenshot does not match your expected sale. Do not release goods. Verify in your banking app.",
     "WAIT_NAME": "The recipient name on the screenshot does not match your business name. Verify in your banking app.",
-    "STOP_DUPLICATE": "This exact screenshot has been submitted before. This is a known scam. Do not proceed.",
+    "STOP_DUPLICATE": "This exact screenshot has been linked to another account. Do not release goods. Verify the funds in your bank app.",
     "STOP_UNREADABLE": "The image is too blurry to verify. Ask the buyer for a clear, original screenshot.",
     "STUB_MODE": "This is a stub explanation. Please verify funds in your bank app."
 }
