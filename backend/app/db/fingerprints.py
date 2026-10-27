@@ -1,87 +1,97 @@
 """
-TASK-25: Fingerprint computation, storage and near-duplicate lookup.
+TASK-25: Fingerprint storage and near-duplicate lookup.
 
-Images → 64-bit perceptual hash (imagehash.phash)
-PDFs   → normalised SHA-256 (placeholder; full parse via TASK-27 sandbox)
+N1 fix (v5 report, CRITICAL):
+  The previous version used imagehash (64-bit pHash) with a threshold of 28.
+  Nyakallo's ocr module uses a 1024-bit DCT hash, and 28 was tuned for THAT
+  hash. On a 64-bit hash, different receipts from the same template are only
+  2-20 bits apart, so threshold 28 flagged 20 of 21 fixtures as duplicates.
 
-Bug fixes (v4 report):
-  Bug 1: SQLite INTEGER is signed 64-bit (max 2^63-1).  The raw pHash uint64
-         can exceed this, causing OverflowError on ~50% of images.
-         Fix: store (value - 2^63) so the range shifts to [-2^63, 2^63-1].
-         Hamming distance still works correctly on XOR of shifted values.
-  Bug 5: find_duplicates previously excluded same-seller rows entirely, making
-         it impossible to report duplicate_same_seller.
-         Fix: return ALL matching rows with a `same_seller` boolean flag.
-         integration.py expects {found, same_seller}.
-  Bug 6: Default threshold was 10; Nyakallo tuned 28 on the fixture set.
-         Fix: default is now 28.
+  Fix: use ocr.phash (1024-bit hex string) and ocr.is_near_duplicate for
+  comparison, exactly as docs/interfaces.md specifies. The hex string is stored
+  in the existing `hash` column (String). hash_int is dropped from the lookup
+  path (the column stays in the DB to avoid a migration, but is always NULL).
+
+  Comparison is done in Python using ocr.is_near_duplicate(hex_a, hex_b).
+  If the ocr module is unavailable (integration not yet merged), fall back to
+  an exact-string match so the store stays safe rather than over-flagging.
+
+Storage signatures match what integration.py expects:
+  find_duplicates(phash_hex, seller_id)  → {"found": bool, "same_seller": bool}
+  save_fingerprint(phash_hex, seller_id, check_id)
 """
-import hashlib
-import io
+import logging
 import os
 
-import imagehash
-from PIL import Image
 from sqlalchemy.orm import Session
 
 from app.db.models import Fingerprint
 
-# Nyakallo's tuned threshold: copies ≤14 bits apart, different receipts ≥56.
-# Configurable via env var.
-HAMMING_THRESHOLD = int(os.getenv("PHASH_HAMMING_THRESHOLD", "28"))
-
-# SQLite signed-int offset: shift uint64 into signed int64 range
-_INT64_OFFSET = 2 ** 63
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Fingerprint computation
+# OCR hash bridge — use Nyakallo's 1024-bit hash functions if available
 # ---------------------------------------------------------------------------
 
-def compute_image_hash(raw: bytes) -> tuple[str, int]:
+def _is_near_duplicate(hex_a: str, hex_b: str) -> bool:
     """
-    Compute a 64-bit perceptual hash of an image.
-    Returns (hex_string, signed_int_for_sqlite).
-    The signed int is stored as (uint64 - 2^63) to fit SQLite INTEGER.
+    Compare two pHash hex strings using ocr.is_near_duplicate when available.
+    Falls back to exact-string comparison so the store never over-flags on
+    a missing ocr module.
     """
-    img = Image.open(io.BytesIO(raw))
-    ph = imagehash.phash(img)
-    hex_str = str(ph)   # 16-char hex, used as source of truth
-    # Convert boolean array → unsigned int → signed int for SQLite
-    uint64 = int("".join("1" if b else "0" for b in ph.hash.flatten()), 2)
-    signed = uint64 - _INT64_OFFSET
-    return hex_str, signed
+    try:
+        from ocr import is_near_duplicate  # backend/ocr module (Nyakallo)
+        return is_near_duplicate(hex_a, hex_b)
+    except ImportError:
+        logger.warning(
+            "ocr module not on sys.path — using exact-match fallback for duplicate check."
+        )
+        return hex_a == hex_b
 
 
-def compute_pdf_hash(raw: bytes) -> tuple[str, int]:
+def compute_phash(raw: bytes) -> str:
     """
-    Normalised content hash for PDFs (SHA-256).
-    Returns (hex_digest, signed_int_for_sqlite).
+    Compute the 1024-bit perceptual hash for an image using ocr.phash.
+    Falls back to imagehash.phash (64-bit) only if ocr is unavailable,
+    and logs a clear warning so it is visible in the startup log.
     """
-    normalised = b" ".join(raw.split())
-    digest = hashlib.sha256(normalised).hexdigest()
-    uint64 = int(digest[:16], 16)
-    signed = uint64 - _INT64_OFFSET
-    return digest, signed
+    try:
+        from ocr import phash  # backend/ocr module (Nyakallo)
+        return phash(raw)
+    except ImportError:
+        logger.warning(
+            "ocr module not on sys.path — using 64-bit imagehash fallback. "
+            "Duplicate detection will be unreliable until integration is wired."
+        )
+        import io
+        import imagehash
+        from PIL import Image
+        ph = imagehash.phash(Image.open(io.BytesIO(raw)))
+        return str(ph)
 
 
 # ---------------------------------------------------------------------------
-# Storage
+# Storage  (signatures match docs/interfaces.md)
 # ---------------------------------------------------------------------------
 
 def save_fingerprint(
     db: Session,
+    phash_hex: str,
     seller_id: str,
     check_id: str,
-    hash_hex: str,
-    hash_int: int,
 ) -> Fingerprint:
-    """Persist a fingerprint row linked to a seller and check."""
+    """
+    Persist a fingerprint row.
+    Args match the signature integration.py expects:
+      save_fingerprint(phash_hex, seller_id, check_id)
+    hash_int is left NULL — comparison is done on the hex string.
+    """
     fp = Fingerprint(
         seller_id=seller_id,
         check_id=check_id,
-        hash=hash_hex,
-        hash_int=hash_int,
+        hash=phash_hex,
+        hash_int=None,          # no longer used for comparison
     )
     db.add(fp)
     db.commit()
@@ -90,65 +100,39 @@ def save_fingerprint(
 
 
 # ---------------------------------------------------------------------------
-# Near-duplicate lookup
+# Near-duplicate lookup  (signature matches docs/interfaces.md)
 # ---------------------------------------------------------------------------
 
 def find_duplicates(
     db: Session,
-    hash_int: int,
+    phash_hex: str,
     current_seller_id: str,
-    threshold: int = HAMMING_THRESHOLD,
-) -> list[dict]:
+) -> dict:
     """
-    Return ALL fingerprints (any seller) within Hamming distance ≤ threshold.
-    Each result includes a `same_seller` flag so the caller can distinguish:
-      - same_seller=True  → duplicate_same_seller (WAIT)
-      - same_seller=False → duplicate_image from another seller (STOP)
+    Compare phash_hex against every stored fingerprint using
+    ocr.is_near_duplicate (1024-bit threshold).
 
-    This matches the dict shape integration.py expects:
-      {"found": bool, "same_seller": bool}
-
-    Only the hash and distance are returned — the other seller's identity
-    is never exposed.
+    Returns {"found": bool, "same_seller": bool} where:
+      found=True,  same_seller=False  → cross-seller duplicate → STOP
+      found=True,  same_seller=True   → same-seller re-upload  → WAIT
+      found=False                     → no duplicate
     """
-    candidates = (
-        db.query(Fingerprint)
-        .filter(Fingerprint.hash_int.isnot(None))
-        .all()
-    )
+    candidates = db.query(Fingerprint).all()
 
-    matches = []
+    cross_found = False
+    same_found = False
+
     for fp in candidates:
-        dist = _hamming(hash_int, fp.hash_int)
-        if dist <= threshold:
-            matches.append(
-                {
-                    "fingerprint_id": fp.id,
-                    "check_id": fp.check_id,
-                    "distance": dist,
-                    "same_seller": fp.seller_id == current_seller_id,
-                }
-            )
-    return matches
+        if not fp.hash:
+            continue
+        if _is_near_duplicate(phash_hex, fp.hash):
+            if fp.seller_id == current_seller_id:
+                same_found = True
+            else:
+                cross_found = True
 
-
-def dup_result(matches: list[dict]) -> dict:
-    """
-    Collapse match list into the {found, same_seller} dict that
-    integration.py and the engine expect.
-    Priority: cross-seller match > same-seller match > not found.
-    """
-    if not matches:
-        return {"found": False, "same_seller": False}
-    cross = [m for m in matches if not m["same_seller"]]
-    if cross:
+    if cross_found:
         return {"found": True, "same_seller": False}
-    return {"found": True, "same_seller": True}
-
-
-def _hamming(a: int, b: int) -> int:
-    """Hamming distance between two signed integers stored in SQLite."""
-    # Re-add offset to recover original bit patterns before XOR
-    ua = (a + _INT64_OFFSET) & 0xFFFFFFFFFFFFFFFF
-    ub = (b + _INT64_OFFSET) & 0xFFFFFFFFFFFFFFFF
-    return bin(ua ^ ub).count("1")
+    if same_found:
+        return {"found": True, "same_seller": True}
+    return {"found": False, "same_seller": False}

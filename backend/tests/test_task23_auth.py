@@ -32,8 +32,9 @@ def test_login_wrong_password(client):
 
 
 def test_protected_route_no_token(client):
+    """N4 fix: missing token must return 401, not 403."""
     resp = client.post("/check")
-    assert resp.status_code in (401, 403, 422)
+    assert resp.status_code == 401
 
 
 def test_protected_route_bad_token(client):
@@ -42,3 +43,11 @@ def test_protected_route_bad_token(client):
         headers={"Authorization": "Bearer not.a.real.token"},
     )
     assert resp.status_code == 401
+
+
+def test_api_prefix_login(client):
+    """N3 fix: /api/auth/login must work as well as /auth/login."""
+    client.post("/auth/register", json={"business_name": "Spaza F", "password": "pass1234"})
+    resp = client.post("/api/auth/login", json={"business_name": "Spaza F", "password": "pass1234"})
+    assert resp.status_code == 200
+    assert "access_token" in resp.json()

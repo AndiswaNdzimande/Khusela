@@ -53,14 +53,23 @@ def _create_token(seller_id: str, business_name: str) -> str:
 # Raises 401 on missing / invalid / expired token.
 # ---------------------------------------------------------------------------
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from typing import Optional
 
-_bearer = HTTPBearer()
+# N4 fix: auto_error=False so FastAPI returns None instead of raising 403
+# when the Authorization header is missing. We then raise 401 ourselves.
+_bearer = HTTPBearer(auto_error=False)
 
 
 def get_current_seller(
-    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> Seller:
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization header missing",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     token = credentials.credentials
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])

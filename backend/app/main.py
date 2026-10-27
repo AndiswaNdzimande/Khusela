@@ -2,13 +2,12 @@
 TASK-21: FastAPI application entry point.
 Start with:  uvicorn app.main:app --reload   (from the backend/ directory)
 
-Bug fixes (v4 report):
-  Bug 8: JWT_SECRET_KEY used os.environ[] at import time, crashing before the
-         app could start or show a helpful message. Moved to a startup check
-         that raises a clear RuntimeError if the key is missing.
-  Bug 7: Scheduler is kept available but NOT started by default, because
-         /check no longer writes raw files to disk. Set START_SCHEDULER=1 in
-         .env to enable it for teams that choose to store files.
+v5 fixes applied:
+  N3: routers now mounted under BOTH /auth + /check AND /api/auth + /api/check
+      so the UI (which posts to /api/...) and the contract both work.
+  N4: HTTPBearer(auto_error=False) so a missing token returns 401, not 403.
+  N6: startup self-test calls _pipeline_self_test() and shows result in /health.
+  LOW: placeholder JWT secret ('replace_with_a_long_random_secret') is rejected.
 """
 import logging
 import os
@@ -24,6 +23,8 @@ logger = logging.getLogger(__name__)
 # Validate required env vars before anything else loads
 # ---------------------------------------------------------------------------
 _JWT_SECRET = os.getenv("JWT_SECRET_KEY", "")
+_PLACEHOLDER = "replace_with_a_long_random_secret"
+
 if not _JWT_SECRET:
     logger.error(
         "JWT_SECRET_KEY is not set. "
@@ -31,12 +32,19 @@ if not _JWT_SECRET:
     )
     sys.exit(1)
 
+if _JWT_SECRET == _PLACEHOLDER:
+    logger.error(
+        "JWT_SECRET_KEY is still the placeholder value from .env.example. "
+        "Generate a real secret: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
+    sys.exit(1)
+
 # ---------------------------------------------------------------------------
-# Application imports (after env check so auth.py can read SECRET_KEY safely)
+# Application imports (after env check so auth.py reads SECRET_KEY safely)
 # ---------------------------------------------------------------------------
 from app.api.auth import router as auth_router
 from app.db.database import Base, engine
-from app.routers.check import router as check_router
+from app.routers.check import router as check_router, _pipeline_self_test
 
 # Create all tables on startup
 Base.metadata.create_all(bind=engine)
@@ -48,7 +56,7 @@ app = FastAPI(
 )
 
 # ---------------------------------------------------------------------------
-# CORS – restrict to frontend origin(s) via ALLOWED_ORIGINS env var
+# CORS — restrict to frontend origin(s) via ALLOWED_ORIGINS env var
 # ---------------------------------------------------------------------------
 _origins_env = os.getenv("ALLOWED_ORIGINS", "")
 allowed_origins = (
@@ -66,9 +74,13 @@ app.add_middleware(
 
 # ---------------------------------------------------------------------------
 # Routers
+# N3 fix: mount under both bare paths AND /api prefix so the UI and the
+# contract work regardless of which prefix is used.
 # ---------------------------------------------------------------------------
-app.include_router(auth_router)
-app.include_router(check_router)
+app.include_router(auth_router)                          # /auth/register, /auth/login
+app.include_router(auth_router, prefix="/api")           # /api/auth/register, /api/auth/login
+app.include_router(check_router)                         # /health, /check
+app.include_router(check_router, prefix="/api")          # /api/health, /api/check
 
 # ---------------------------------------------------------------------------
 # Lifecycle
@@ -79,20 +91,26 @@ _scheduler = None
 @app.on_event("startup")
 def on_startup():
     global _scheduler
-    # Scheduler only started if raw-file storage is explicitly enabled
+
+    # Scheduler only if raw-file storage is explicitly enabled
     if os.getenv("START_SCHEDULER", "0") == "1":
         from app.scheduler import start_scheduler
         _scheduler = start_scheduler()
         logger.info("Raw-file deletion scheduler started.")
     else:
-        logger.info(
-            "Deletion scheduler is OFF (START_SCHEDULER != 1). "
-            "/check does not store raw files — no cleanup needed."
+        logger.info("Deletion scheduler OFF (START_SCHEDULER != 1).")
+
+    # N6 fix: self-test the pipeline with a real call, not just an import check
+    pipeline_ok = _pipeline_self_test()
+    if pipeline_ok:
+        logger.info("Pipeline self-test: REAL — integration.check_payment is callable.")
+    else:
+        logger.warning(
+            "Pipeline self-test: STUB — /check will return engine_unavailable. "
+            "Merge TASK-05 branch and fix check_payment kwargs to get real verdicts."
         )
 
-    # Log which pieces are real vs stand-in (acceptance check from report section 5)
-    _log_integration_status()
-    logger.info("Khusela API started.")
+    logger.info("Khusela API started. /health shows pipeline status.")
 
 
 @app.on_event("shutdown")
@@ -100,18 +118,3 @@ def on_shutdown():
     if _scheduler and _scheduler.running:
         _scheduler.shutdown(wait=False)
     logger.info("Khusela API shut down.")
-
-
-def _log_integration_status():
-    """Log whether each pipeline piece is real or a stand-in."""
-    pieces = {
-        "integration": "integration",
-        "ocr": "ocr",
-        "engine": "engine",
-    }
-    for name, module in pieces.items():
-        try:
-            __import__(module)
-            logger.info("Pipeline piece '%s': REAL", name)
-        except ImportError:
-            logger.warning("Pipeline piece '%s': STAND-IN (ImportError)", name)

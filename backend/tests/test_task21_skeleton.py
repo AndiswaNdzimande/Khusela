@@ -14,4 +14,11 @@ def test_docs_available(client):
 
 def test_check_requires_auth(client):
     resp = client.post("/check")
-    assert resp.status_code in (401, 403, 422)
+    assert resp.status_code == 401   # N4: must be 401 not 403
+
+
+def test_api_prefix_health(client):
+    """N3 fix: /api/health must work as well as /health."""
+    resp = client.get("/api/health")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"

@@ -23,3 +23,4 @@ class CheckResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
+    pipeline: Optional[bool] = None     # True=real pipeline callable, False=stub, None=not tested

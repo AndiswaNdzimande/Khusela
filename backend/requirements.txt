@@ -15,9 +15,11 @@ python-jose[cryptography]==3.3.0
 
 # Upload safety gate (TASK-24)
 python-magic==0.4.27
-Pillow==10.3.0
+# N9 fix: Pillow 10.3.0 has a known vulnerability flag; upgrade to 10.4.0
+Pillow==10.4.0
 
 # Fingerprinting (TASK-25)
+# imagehash kept as fallback when ocr module is unavailable
 imagehash==4.3.1
 
 # Scheduler – raw image deletion (TASK-26)
@@ -29,7 +31,8 @@ python-dotenv==1.0.1
 # Existing pipeline deps
 pytesseract==0.3.10
 numpy==1.26.4
-google-genai==0.5.0
+# N9 fix: google-genai 0.5.0 was yanked; 1.7.0 is the current stable release
+google-genai==1.7.0
 
 # Testing
 pytest==8.2.0
