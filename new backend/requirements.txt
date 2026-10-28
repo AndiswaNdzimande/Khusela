@@ -1,0 +1,24 @@
+# Core API
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+pydantic[email]==2.11.3
+
+# Database
+sqlalchemy==2.0.30
+python-dotenv==1.0.1
+
+# Image processing & OCR pipeline
+Pillow==10.3.0
+numpy==1.26.4
+pytesseract==0.3.10
+
+# Privacy scheduler (24-hour raw-file deletion)
+apscheduler==3.10.4
+
+# HTTP client
+httpx==0.28.1
+
+# Testing
+pytest==8.3.5
+pytest-asyncio==0.23.6

@@ -1,3 +1,12 @@
+from .forensics import (
+    analyze_document_forensics,
+    analyze_metadata,
+    analyze_pdf_stream,
+    calculate_mrz_check_digit,
+    compute_ela,
+    parse_and_validate_mrz,
+    validate_mrz_checksum,
+)
 """Khusela OCR package: local Tesseract with a Docker fallback, plus pHash."""
 
 from .confidence import (

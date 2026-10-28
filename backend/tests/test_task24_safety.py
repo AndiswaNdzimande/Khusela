@@ -90,9 +90,9 @@ async def test_truncated_image_rejected():
 
 
 @pytest.mark.asyncio
-async def test_pdf_rejected():
-    """PDF is out of contract — must be rejected with 415."""
+async def test_pdf_accepted():
+    """PDF is supported for document forensic analysis."""
     pdf_bytes = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF"
-    with pytest.raises(HTTPException) as exc:
-        await validate_upload(_upload(pdf_bytes))
-    assert exc.value.status_code == 415
+    raw, ctype = await validate_upload(_upload(pdf_bytes))
+    assert raw.startswith(b"%PDF")
+    assert ctype == "application/pdf" 

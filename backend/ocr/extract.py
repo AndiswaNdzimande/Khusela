@@ -149,6 +149,11 @@ class ExtractedFields:
     recipient: str | None
     reference: str | None
     raw_text: str = ""
+    #: Payment timestamp printed on the receipt, normalised to
+    #: ``YYYY-MM-DDTHH:MM`` (date only, or ``HH:MM`` when only a time is
+    #: readable). Together with the reference and the amount it identifies the
+    #: transaction for duplicate detection; see ``app/db/fingerprints.py``.
+    timestamp: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         """Return the fields in the shape expected by the verdict contract."""
@@ -428,6 +433,93 @@ def _extract_reference(text: str) -> str | None:
     return reference
 
 
+_MONTHS = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+# "24 Oct 2026 14:32" / "24 October 2026, 08:21"
+_DATE_NAMED_RE = re.compile(
+    r"\b(?P<d>\d{1,2})[ \t]+(?P<mon>jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)"
+    r"[a-z]*[ \t]+(?P<y>\d{4})(?:[ \t,]+(?P<h>\d{1,2}):(?P<min>\d{2}))?",
+    re.IGNORECASE,
+)
+# "2026-10-24 14:32" / "2026/10/24"
+_DATE_ISO_RE = re.compile(
+    r"\b(?P<y>\d{4})[-/](?P<m>\d{1,2})[-/](?P<d>\d{1,2})"
+    r"(?:[T \t]+(?P<h>\d{1,2}):(?P<min>\d{2}))?"
+)
+# "24/10/2026 14:32" (day first, as used by South African banks)
+_DATE_NUMERIC_RE = re.compile(
+    r"\b(?P<d>\d{1,2})[/-](?P<m>\d{1,2})[/-](?P<y>\d{4})"
+    r"(?:[ \t,]+(?P<h>\d{1,2}):(?P<min>\d{2}))?"
+)
+# A bare clock time, only used when no date was printed.
+_TIME_RE = re.compile(r"\b(?P<h>\d{1,2}):(?P<min>\d{2})(?::\d{2})?\b")
+# "... Date 24 Oct 2026" / "Time 14:32" — a label makes a match trustworthy.
+_DATE_LABEL_RE = re.compile(
+    r"(?:date|payment date|transaction date|processed|time|sent)[^a-z0-9]{0,12}$",
+    re.IGNORECASE,
+)
+
+
+def _format_timestamp(groups: dict[str, str]) -> str | None:
+    try:
+        if "mon" in groups:
+            month = _MONTHS[groups["mon"][:3].lower()]
+            day, year = int(groups["d"]), int(groups["y"])
+        elif "y" in groups:
+            year, month, day = int(groups["y"]), int(groups["m"]), int(groups["d"])
+        else:
+            return None
+        if not (1 <= month <= 12 and 1 <= day <= 31 and 1900 <= year <= 2100):
+            return None
+    except (KeyError, ValueError):
+        return None
+
+    stamp = f"{year:04d}-{month:02d}-{day:02d}"
+    if groups.get("h") is not None:
+        hour, minute = int(groups["h"]), int(groups["min"])
+        if hour > 23 or minute > 59:
+            return stamp
+        stamp += f"T{hour:02d}:{minute:02d}"
+    return stamp
+
+
+def _extract_timestamp(text: str) -> str | None:
+    """Read the payment timestamp printed on the receipt.
+
+    Returns a normalised string such as ``2026-10-24T14:32``, a date-only
+    ``2026-10-24``, a time-only ``14:32``, or ``None`` when nothing readable
+    is present. It is used as part of the transaction key, never shown as
+    proof of anything on its own.
+    """
+    best: tuple[int, int, str] | None = None
+
+    for pattern in (_DATE_NAMED_RE, _DATE_ISO_RE, _DATE_NUMERIC_RE):
+        for match in pattern.finditer(text):
+            stamp = _format_timestamp(match.groupdict())
+            if not stamp:
+                continue
+            before = text[max(0, match.start() - 30) : match.start()]
+            score = 60 if _DATE_LABEL_RE.search(before) else 40
+            candidate = (score, -match.start(), stamp)
+            if best is None or candidate[:2] > best[:2]:
+                best = candidate
+
+    if best:
+        return best[2]
+
+    for match in _TIME_RE.finditer(text):
+        before = text[max(0, match.start() - 30) : match.start()]
+        if not _DATE_LABEL_RE.search(before):
+            continue  # a bare "14:32" elsewhere on the screen is not a date
+        hour, minute = int(match.group("h")), int(match.group("min"))
+        if hour <= 23 and minute <= 59:
+            return f"{hour:02d}:{minute:02d}"
+    return None
+
+
 def extract_fields(text: str) -> ExtractedFields:
     """Extract amount, recipient and reference from OCR text."""
     normalised = _normalise_text(text)
@@ -439,6 +531,7 @@ def extract_fields(text: str) -> ExtractedFields:
         recipient=_extract_recipient(normalised),
         reference=_extract_reference(normalised),
         raw_text=text or "",
+        timestamp=_extract_timestamp(normalised),
     )
 
 
@@ -452,6 +545,10 @@ def extract_recipient(text: str) -> str | None:
 
 def extract_reference(text: str) -> str | None:
     return _extract_reference(_normalise_text(text))
+
+
+def extract_timestamp(text: str) -> str | None:
+    return _extract_timestamp(_normalise_text(text))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -485,6 +582,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Amount:    {fields.amount}")
         print(f"Recipient: {fields.recipient}")
         print(f"Reference: {fields.reference}")
+        print(f"Timestamp: {fields.timestamp}")
     return 0
 
 

@@ -34,6 +34,7 @@ from app.api.safety import validate_upload
 from app.db.database import get_db
 from app.db.fingerprints import (
     compute_image_hash,
+    compute_reference_hash,
     dup_result,
     find_duplicates,
     save_fingerprint,
@@ -72,10 +73,11 @@ async def check_endpoint(
     hash_hex, hash_int = compute_image_hash(raw_bytes)
 
     # ------------------------------------------------------------------ #
-    # 3. Duplicate lookup – returns all matches with same_seller flag     #
+    # 3. Duplicate lookup – reference hash (primary) + pHash (secondary)  #
     # ------------------------------------------------------------------ #
-    matches = find_duplicates(db, hash_int, seller.id)
-    dup = dup_result(matches)          # {"found": bool, "same_seller": bool}
+    ref_hash = compute_reference_hash(expected_reference, expected_amount)
+    matches = find_duplicates(db, hash_int, seller.id, reference_hash=ref_hash)
+    dup = dup_result(matches)          # {"found": bool, "same_seller": bool, "reason": ...}
     is_duplicate = dup["found"]
 
     # ------------------------------------------------------------------ #
@@ -103,7 +105,9 @@ async def check_endpoint(
     db.add(check_row)
     db.flush()
 
-    save_fingerprint(db, seller.id, check_row.id, hash_hex, hash_int)
+    saved_ref = extracted.get("reference") or expected_reference
+    saved_ref_hash = compute_reference_hash(saved_ref, extracted.get("amount") or expected_amount)
+    save_fingerprint(db, seller.id, check_row.id, hash_hex, hash_int, reference_hash=saved_ref_hash)
     db.commit()
     db.refresh(check_row)
 

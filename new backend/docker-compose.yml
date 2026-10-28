@@ -1,0 +1,23 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      VERIPOP_AUTH_SECRET: ${VERIPOP_AUTH_SECRET:?Set VERIPOP_AUTH_SECRET in your environment or .env}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-${VERIPOP_AUTH_SECRET}}
+      DATABASE_URL: sqlite:////srv/veripop/data/khusela.db
+      VERIPOP_DATA_DIR: /srv/veripop/data
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-10485760}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+    volumes:
+      - veripop_documents:/srv/veripop/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+volumes:
+  veripop_documents:

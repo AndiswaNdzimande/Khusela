@@ -93,6 +93,7 @@ class Fingerprint(Base):
     )
     hash = Column(String, nullable=False)           # hex string of the perceptual hash
     hash_int = Column(BigInteger, nullable=True)    # signed int64 for Hamming distance queries
+    reference_hash = Column(String, nullable=True, index=True) # SHA-256 of normalised ref+amt+timestamp
     created_at = Column(DateTime(timezone=True), default=_now, nullable=False)
 
     seller = relationship("Seller", back_populates="fingerprints")

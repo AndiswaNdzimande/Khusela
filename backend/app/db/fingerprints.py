@@ -65,6 +65,29 @@ def compute_pdf_hash(raw: bytes) -> tuple[str, int]:
     return digest, signed
 
 
+
+def compute_reference_hash(
+    reference: str | None,
+    amount: float | None = None,
+    timestamp: str | None = None,
+) -> str | None:
+    """
+    Compute a normalised SHA-256 transaction key from reference, amount and timestamp.
+    Used for reliable fraud duplicate detection across sellers.
+    """
+    if not reference:
+        return None
+    ref_norm = "".join(c for c in str(reference).lower() if c.isalnum())
+    if not ref_norm:
+        return None
+    parts = [ref_norm]
+    if amount is not None and amount > 0:
+        parts.append(f"{amount:.2f}")
+    if timestamp and str(timestamp).strip():
+        parts.append(str(timestamp).strip())
+    raw = ":".join(parts)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
 # ---------------------------------------------------------------------------
 # Storage
 # ---------------------------------------------------------------------------
@@ -75,6 +98,7 @@ def save_fingerprint(
     check_id: str,
     hash_hex: str,
     hash_int: int,
+    reference_hash: str | None = None,
 ) -> Fingerprint:
     """Persist a fingerprint row linked to a seller and check."""
     fp = Fingerprint(
@@ -82,6 +106,7 @@ def save_fingerprint(
         check_id=check_id,
         hash=hash_hex,
         hash_int=hash_int,
+        reference_hash=reference_hash,
     )
     db.add(fp)
     db.commit()
@@ -97,6 +122,7 @@ def find_duplicates(
     db: Session,
     hash_int: int,
     current_seller_id: str,
+    reference_hash: str | None = None,
     threshold: int = HAMMING_THRESHOLD,
 ) -> list[dict]:
     """
@@ -118,32 +144,57 @@ def find_duplicates(
     )
 
     matches = []
-    for fp in candidates:
-        dist = _hamming(hash_int, fp.hash_int)
-        if dist <= threshold:
+    # 1. Primary duplicate signal: Reference / Transaction Hash match
+    if reference_hash:
+        ref_matches = (
+            db.query(Fingerprint)
+            .filter(Fingerprint.reference_hash == reference_hash)
+            .all()
+        )
+        for fp in ref_matches:
             matches.append(
                 {
                     "fingerprint_id": fp.id,
                     "check_id": fp.check_id,
-                    "distance": dist,
+                    "distance": 0,
                     "same_seller": fp.seller_id == current_seller_id,
+                    "reason": "duplicate_reference",
                 }
             )
+
+    # 2. Secondary signal: pHash near-duplicate image match
+    for fp in candidates:
+        dist = _hamming(hash_int, fp.hash_int)
+        if dist <= threshold:
+            if not any(m["fingerprint_id"] == fp.id for m in matches):
+                matches.append(
+                    {
+                        "fingerprint_id": fp.id,
+                        "check_id": fp.check_id,
+                        "distance": dist,
+                        "same_seller": fp.seller_id == current_seller_id,
+                        "reason": "duplicate_image",
+                    }
+                )
     return matches
 
 
 def dup_result(matches: list[dict]) -> dict:
     """
-    Collapse match list into the {found, same_seller} dict that
-    integration.py and the engine expect.
+    Collapse match list into the {found, same_seller, reason} dict that
+    the engine expects.
     Priority: cross-seller match > same-seller match > not found.
     """
     if not matches:
-        return {"found": False, "same_seller": False}
+        return {"found": False, "same_seller": False, "reason": None}
     cross = [m for m in matches if not m["same_seller"]]
     if cross:
-        return {"found": True, "same_seller": False}
-    return {"found": True, "same_seller": True}
+        ref_match = next((m for m in cross if m.get("reason") == "duplicate_reference"), None)
+        reason = "duplicate_reference" if ref_match else "duplicate_image"
+        return {"found": True, "same_seller": False, "reason": reason}
+    ref_match = next((m for m in matches if m.get("reason") == "duplicate_reference"), None)
+    reason = "duplicate_reference" if ref_match else "duplicate_image"
+    return {"found": True, "same_seller": True, "reason": reason}
 
 
 def _hamming(a: int, b: int) -> int:

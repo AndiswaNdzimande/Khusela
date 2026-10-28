@@ -2330,3 +2330,120 @@ button:disabled {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* WhatsApp Customer Reply Preview & Debug Accordion                          */
+/* -------------------------------------------------------------------------- */
+.whatsapp-card {
+  border-left: 4px solid #25D366;
+  background: linear-gradient(180deg, rgba(37, 211, 102, 0.05) 0%, var(--card) 100%);
+  margin-bottom: 22px;
+}
+
+.whatsapp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.whatsapp-sender {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.whatsapp-avatar {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.whatsapp-sub {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.whatsapp-bubble {
+  position: relative;
+  background: #DCF8C6;
+  color: #111B21;
+  border-radius: 12px;
+  border-top-left-radius: 2px;
+  padding: 16px 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+[data-theme="dark"] .whatsapp-bubble,
+.dark .whatsapp-bubble {
+  background: #005C4B;
+  color: #E9EDEF;
+}
+
+.whatsapp-bubble-wait {
+  border-left: 4px solid #f59e0b;
+}
+
+.whatsapp-bubble-stop {
+  border-left: 4px solid #ef4444;
+}
+
+.whatsapp-bubble-match {
+  border-left: 4px solid #10b981;
+}
+
+.whatsapp-text {
+  font-size: 15px;
+  line-height: 1.55;
+  margin: 0;
+  color: inherit;
+  font-weight: 450;
+}
+
+.whatsapp-emoji {
+  margin-right: 4px;
+}
+
+.whatsapp-time {
+  align-self: flex-end;
+  font-size: 10px;
+  opacity: 0.65;
+}
+
+.debug-card {
+  margin-top: 24px;
+  border: 1px dashed var(--line);
+  background: var(--bg-alt, #0f172a);
+}
+
+.debug-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.debug-content {
+  margin-top: 14px;
+}
+
+.debug-json {
+  background: rgba(0, 0, 0, 0.4);
+  color: #38bdf8;
+  padding: 14px;
+  border-radius: 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  max-height: 380px;
+}

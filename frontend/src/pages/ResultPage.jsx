@@ -154,6 +154,41 @@ export default function ResultPage() {
 
       <BankReminder />
 
+      {/* WhatsApp-style customer reply preview (Immediate 10-second demo signal) */}
+      <section className="card whatsapp-card">
+        <div className="whatsapp-header">
+          <div className="whatsapp-sender">
+            <span className="whatsapp-avatar">💬</span>
+            <div>
+              <strong>WhatsApp reply for buyer</strong>
+              <span className="whatsapp-sub">Send this directly to the customer</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="button button-sm button-secondary"
+            onClick={() => {
+              const symbol = verdict === "STOP" ? "🛑 STOP" : verdict === "WAIT" ? "⚠️ WAIT" : "✅ MATCH";
+              const text = `${symbol}: ${check.explanation}`;
+              navigator.clipboard?.writeText(text);
+              alert("Copied WhatsApp message to clipboard!");
+            }}
+          >
+            <Icon name="spark" size={14} /> Copy message
+          </button>
+        </div>
+        <div className={`whatsapp-bubble whatsapp-bubble-${verdict.toLowerCase()}`}>
+          <p className="whatsapp-text">
+            <span className="whatsapp-emoji">
+              {verdict === "STOP" ? "🛑" : verdict === "WAIT" ? "⚠️" : "✅"}
+            </span>{" "}
+            <strong>{verdict}.</strong> {check.explanation}
+          </p>
+          <span className="whatsapp-time">Just now ✓✓</span>
+        </div>
+      </section>
+
+
       <div className="result-grid">
         <div className="result-main">
           <section className="card">
@@ -275,6 +310,21 @@ export default function ResultPage() {
           </section>
         </aside>
       </div>
+
+      {/* Under the hood tab for technical judges */}
+      <details className="card debug-card">
+        <summary className="debug-summary">
+          <Icon name="spark" size={16} />
+          <span>Under the hood (API JSON Payload)</span>
+        </summary>
+        <div className="debug-content">
+          <p className="muted small" style={{ marginBottom: 12 }}>
+            Raw JSON response returned by <code>POST /check</code>:
+          </p>
+          <pre className="debug-json">{JSON.stringify(check, null, 2)}</pre>
+        </div>
+      </details>
+
     </div>
   );
 }

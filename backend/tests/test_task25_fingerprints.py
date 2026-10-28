@@ -35,10 +35,33 @@ _Session = sessionmaker(bind=_engine)
 def setup_module():
     Base.metadata.create_all(bind=_engine)
 
+@pytest.fixture(autouse=True)
+def clean_db():
+    Base.metadata.drop_all(bind=_engine)
+    Base.metadata.create_all(bind=_engine)
+    yield
+
 
 def _img(color="red", size=(100, 100)) -> bytes:
+    from PIL import ImageDraw
+    img = Image.new("RGB", size, color="white")
+    draw = ImageDraw.Draw(img)
+    # Distinct visual shapes per color key so pHash has spatial features
+    if color == "red":
+        draw.rectangle([10, 10, 50, 50], fill="red")
+    elif color == "cyan":
+        draw.line([0, 0, size[0], size[1]], fill="cyan", width=8)
+        draw.ellipse([60, 60, 90, 90], fill="blue")
+    elif color == "blue":
+        draw.ellipse([10, 10, 90, 90], fill="blue")
+    elif color == "purple":
+        draw.polygon([(10, 10), (90, 50), (10, 90)], fill="purple")
+    elif color == "orange":
+        draw.rectangle([20, 20, 80, 80], fill="orange")
+    else:
+        draw.rectangle([30, 30, 70, 70], fill=color)
     buf = io.BytesIO()
-    Image.new("RGB", size, color=color).save(buf, format="JPEG")
+    img.save(buf, format="JPEG")
     return buf.getvalue()
 
 
