@@ -7,6 +7,7 @@ load_dotenv()
 
 api_key = os.getenv("GEMINI_API_KEY")
 
+
 def generate_ai_explanation(verdict_result: dict) -> str:
     verdict = verdict_result.get("verdict", "WAIT")
     reasons = verdict_result.get("reasons", [])
@@ -17,18 +18,20 @@ def generate_ai_explanation(verdict_result: dict) -> str:
         return template_fallback
 
     prompt = f"""
-    You are Khusela, a helpful assistant for South African small business owners.
+    You are Khuzeka, a helpful AI security assistant for South African small business owners.
     We have just run a safety check on a payment screenshot.
-    
+
     The deterministic verdict is: {verdict}
     The reasons are: {reasons}
-    
+
     Write a short, friendly 2-sentence explanation for the seller.
     If the verdict is STOP, tell them firmly not to release the goods.
     If the verdict is WAIT, tell them to verify the funds in their bank app.
     If the verdict is MATCH, remind them to still check their bank app.
-    
-    Do not change the verdict. Do not add new rules. Keep it under 40 words.
+
+    Then, add a third sentence starting with "Tip: " that gives them one specific piece of advice to avoid this scam next time.
+
+    Do not change the verdict. Do not add new rules. Keep it under 50 words.
     """
 
     try:
@@ -38,7 +41,16 @@ def generate_ai_explanation(verdict_result: dict) -> str:
             model='gemini-2.5-flash',
             contents=prompt,
         )
-        return response.text.strip()
+        text = response.text.strip()
+
+        # AI GUARDRAIL: If the verdict is STOP/WAIT, the AI must not say "safe" or "paid"
+        if verdict != "MATCH":
+            bad_words = ["safe to release", "paid", "funds have cleared", "safe"]
+            if any(word in text.lower() for word in bad_words):
+                print("AI GUARD TRIGGERED: AI hallucinated safety. Falling back to template.")
+                return template_fallback
+
+        return text
 
     except Exception as e:
         print(f"AI Error: {e}. Falling back to template.")

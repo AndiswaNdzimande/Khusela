@@ -15,6 +15,7 @@ class CheckResponse(BaseModel):
     duplicate: Dict[str, Any] = {}
     raw_ocr_text: Optional[str] = None
     explanation_source: str = "template"
+    suggested_reply: Optional[str] = None # NEW FIELD
     bank_reminder: str = (
         "Always confirm with your bank before releasing goods. "
         "Khusela checks the slip only — it cannot guarantee that funds have cleared."

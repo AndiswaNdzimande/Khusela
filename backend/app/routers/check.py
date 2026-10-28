@@ -4,24 +4,11 @@ Requires a valid Bearer token (TASK-23).
 
 Pipeline:
   1. validate_upload   – size cap, magic-byte MIME, Pillow parse   (TASK-24)
-  2. compute pHash fingerprint                                       (TASK-25)
+  2. compute fingerprint (1024-bit or 64-bit fallback)              (TASK-25)
   3. find_duplicates   – all sellers, with same_seller flag          (TASK-25)
   4. call integration.check_payment (the real pipeline)              (TASK-05)
-     Falls back to a labelled stub if integration is not on sys.path.
-  5. persist Check + Fingerprint rows                                (TASK-22)
-
-Bug fixes (v4 report):
-  Bug 3: _run_engine called `from engine import evaluate` (gets the module,
-         not the function), passed wrong kwarg name (duplicate= vs dup_result=),
-         read OCR result as dict (it is an object), hard-coded same_seller=False,
-         only caught ImportError so TypeError → 500.
-         Fix: call integration.check_payment which already handles the engine
-         correctly. Catch all exceptions, not just ImportError.
-  Bug 7: /check previously wrote every upload to ./uploads/raw, contradicting
-         the privacy story ("nothing stored").
-         Fix: raw bytes are never written to disk. The scheduler is still
-         available for teams that choose to store files, but /check does not use it.
-  Field rename: frontend sends field name 'image', not 'file' (report bug 4).
+  5. NEW: enhance explanation with Khuzeka (generate_ai_explanation) (TASK-12+)
+  6. persist Check + Fingerprint rows                                (TASK-22)
 """
 import logging
 from typing import Optional
@@ -41,6 +28,7 @@ from app.db.fingerprints import (
 )
 from app.db.models import Check, Seller
 from app.schemas.check import CheckResponse, HealthResponse
+from engine.ai_explainer import generate_ai_explanation  # NEW: Khuzeka
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +42,6 @@ def health():
 
 @router.post("/check", response_model=CheckResponse)
 async def check_endpoint(
-    # Frontend sends field name 'image' (bug 4 fix)
     image: UploadFile = File(...),
     expected_amount: float = Form(...),
     expected_recipient: str = Form(...),
@@ -62,28 +49,36 @@ async def check_endpoint(
     db: Session = Depends(get_db),
     seller: Seller = Depends(get_current_seller),
 ):
-    # ------------------------------------------------------------------ #
-    # 1. Safety gate – size, MIME, Pillow parse                           #
-    # ------------------------------------------------------------------ #
+    # 1. Safety gate
     raw_bytes, mime_type = await validate_upload(image)
 
-    # ------------------------------------------------------------------ #
-    # 2. Compute fingerprint (overflow-safe signed int)                   #
-    # ------------------------------------------------------------------ #
-    hash_hex, hash_int = compute_image_hash(raw_bytes)
+    # 2. Compute fingerprint (Returns 3 values now)
+    hash_hex, hash_int, hash_algo = compute_image_hash(raw_bytes)
 
+<<<<<<< HEAD
     # ------------------------------------------------------------------ #
     # 3. Duplicate lookup – reference hash (primary) + pHash (secondary)  #
     # ------------------------------------------------------------------ #
     ref_hash = compute_reference_hash(expected_reference, expected_amount)
     matches = find_duplicates(db, hash_int, seller.id, reference_hash=ref_hash)
     dup = dup_result(matches)          # {"found": bool, "same_seller": bool, "reason": ...}
+=======
+    # 3. Duplicate lookup (Takes 4 arguments now)
+    matches = find_duplicates(db, hash_hex, hash_algo, seller.id)
+    dup = dup_result(matches)
+>>>>>>> aba3f0e96c9b960aa272c9eec4807c3b8cc2fdaf
     is_duplicate = dup["found"]
 
-    # ------------------------------------------------------------------ #
-    # 4. Run the real pipeline via integration.check_payment              #
-    # ------------------------------------------------------------------ #
-    verdict, reasons, explanation, confidence, raw_ocr_text, extracted = _run_pipeline(
+    # 4. Run the real pipeline
+    (
+        verdict,
+        reasons,
+        engine_explanation,
+        confidence,
+        raw_ocr_text,
+        extracted,
+        suggested_reply, # NEW
+    ) = _run_pipeline(
         raw_bytes=raw_bytes,
         expected_amount=expected_amount,
         expected_recipient=expected_recipient,
@@ -92,9 +87,16 @@ async def check_endpoint(
         seller_id=seller.id,
     )
 
-    # ------------------------------------------------------------------ #
-    # 5. Persist Check row (no raw file stored – privacy compliant)       #
-    # ------------------------------------------------------------------ #
+    # 5. Enhance explanation with Khuzeka
+    is_stub = raw_ocr_text is None
+    final_explanation, explanation_source = _enhance_explanation(
+        verdict=verdict,
+        reasons=reasons,
+        engine_explanation=engine_explanation,
+        is_stub=is_stub,
+    )
+
+    # 6. Persist Check row
     check_row = Check(
         seller_id=seller.id,
         verdict=verdict,
@@ -105,9 +107,14 @@ async def check_endpoint(
     db.add(check_row)
     db.flush()
 
+<<<<<<< HEAD
     saved_ref = extracted.get("reference") or expected_reference
     saved_ref_hash = compute_reference_hash(saved_ref, extracted.get("amount") or expected_amount)
     save_fingerprint(db, seller.id, check_row.id, hash_hex, hash_int, reference_hash=saved_ref_hash)
+=======
+    # Save fingerprint (Takes 6 arguments now)
+    save_fingerprint(db, seller.id, check_row.id, hash_hex, hash_int, hash_algo)
+>>>>>>> aba3f0e96c9b960aa272c9eec4807c3b8cc2fdaf
     db.commit()
     db.refresh(check_row)
 
@@ -115,7 +122,7 @@ async def check_endpoint(
         check_id=check_row.id,
         verdict=verdict,
         reasons=reasons,
-        explanation=explanation,
+        explanation=final_explanation,
         confidence=confidence,
         is_duplicate=is_duplicate,
         extracted=extracted,
@@ -130,14 +137,13 @@ async def check_endpoint(
             "matches": len(matches),
         },
         raw_ocr_text=raw_ocr_text,
-        explanation_source="engine" if raw_ocr_text else "stub",
+        explanation_source=explanation_source,
+        suggested_reply=suggested_reply, # NEW
     )
 
 
 # ---------------------------------------------------------------------------
 # Pipeline bridge
-# Bug 3 fix: call integration.check_payment, not engine.evaluate directly.
-# Catches ALL exceptions (not just ImportError) so TypeError never → 500.
 # ---------------------------------------------------------------------------
 def _run_pipeline(
     raw_bytes: bytes,
@@ -167,9 +173,9 @@ def _run_pipeline(
             result.get("confidence"),
             result.get("raw_ocr_text"),
             result.get("extracted", {}),
+            result.get("suggested_reply", ""), # NEW
         )
     except Exception as exc:
-        # Log the real error so it is visible in the server log
         logger.warning("Pipeline unavailable (%s: %s) — returning stub.", type(exc).__name__, exc)
         return (
             "WAIT",
@@ -178,4 +184,29 @@ def _run_pipeline(
             None,
             None,
             {},
+            "", # Fallback for suggested_reply
         )
+
+
+# ---------------------------------------------------------------------------
+# Khuzeka enhancement
+# ---------------------------------------------------------------------------
+def _enhance_explanation(
+    verdict: str,
+    reasons: list,
+    engine_explanation: str,
+    is_stub: bool,
+) -> tuple:
+    if is_stub:
+        return engine_explanation, "stub"
+    try:
+        ai_text = generate_ai_explanation({
+            "verdict": verdict,
+            "reasons": reasons,
+            "explanation": engine_explanation,
+        })
+        if ai_text and ai_text.strip() != engine_explanation.strip():
+            return ai_text, "ai"
+    except Exception as exc:
+        logger.warning("AI explainer failed (%s: %s) — using engine text.", type(exc).__name__, exc)
+    return engine_explanation, "engine"

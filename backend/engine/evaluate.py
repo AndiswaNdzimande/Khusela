@@ -18,6 +18,7 @@ from typing import Any
 
 from .templates import get_template
 
+<<<<<<< HEAD
 BANK_REMINDER = "Check your banking app first."
 
 
@@ -30,22 +31,52 @@ def normalize_amount(amount_str: Any) -> float:
         return 0.0
     # Remove everything except digits and decimal points
     clean_str = re.sub(r"[^\d.]", "", str(amount_str))
+=======
+def normalize_amount(amount_str: str) -> float:
+    if not amount_str:
+        return 0.0
+
+    # Remove everything except digits, commas, and periods
+    clean_str = re.sub(r'[^\d,.]', '', str(amount_str))
+
+    if ',' in clean_str and '.' in clean_str:
+        # Both exist. Whichever is LAST is the decimal separator.
+        if clean_str.rfind(',') > clean_str.rfind('.'):
+            # European: 1.800,00
+            clean_str = clean_str.replace('.', '').replace(',', '.')
+        else:
+            # SA/UK: 1,800.00 or 1,234,567.89
+            clean_str = clean_str.replace(',', '')
+
+    elif ',' in clean_str:
+        # Only comma exists. Is it a decimal (1800,00) or thousands (R1,800)?
+        if clean_str.count(',') == 1 and len(clean_str.split(',')[-1]) == 3:
+            clean_str = clean_str.replace(',', '')   # "1,800" -> 1800
+        else:
+            clean_str = clean_str.replace(',', '.')  # "1800,00" -> 1800.00
+
+>>>>>>> aba3f0e96c9b960aa272c9eec4807c3b8cc2fdaf
     try:
         return float(clean_str)
     except ValueError:
         return 0.0
 
 
+<<<<<<< HEAD
 def normalize_name(name_str: Any) -> str:
     """
     Cleans names for comparison.
     Lowercases, removes spaces, and ignores common punctuation.
     """
+=======
+def normalize_name(name_str: str) -> str:
+>>>>>>> aba3f0e96c9b960aa272c9eec4807c3b8cc2fdaf
     if not name_str:
         return ""
     return re.sub(r"[^a-z0-9]", "", str(name_str).lower())
 
 
+<<<<<<< HEAD
 def normalize_reference(reference_str: Any) -> str:
     """Cleans a payment reference for comparison (case and punctuation free)."""
     if not reference_str:
@@ -265,16 +296,83 @@ def evaluate(
     # 2. OCR CONFIDENCE — if the image is too blurry we cannot trust the text.
     if confidence < 0.5:
         return _result("WAIT", ["low_ocr_confidence"])
+=======
+def evaluate(extracted: dict, expected: dict, ocr_confidence: float, dup_result: dict) -> dict:
+    reasons = []
+    verdict = "MATCH"
+
+    is_duplicate = dup_result.get("found", False)
+    same_seller = dup_result.get("same_seller", False)
+
+    # 1. CROSS-SELLER DUPLICATE (The ONLY hard STOP)
+    if is_duplicate and not same_seller:
+        return {
+            "verdict": "STOP",
+            "reasons": ["duplicate_image"],
+            "explanation": "This exact screenshot was submitted by another seller. It is a known fake. Do not release goods.",
+            "confidence": ocr_confidence,
+            "is_duplicate": True
+        }
+
+    # 2. OCR CONFIDENCE CHECK
+    if ocr_confidence < 0.5:
+        return {
+            "verdict": "WAIT",
+            "reasons": ["low_ocr_confidence"],
+            "explanation": get_template("STOP_UNREADABLE"),
+            "confidence": ocr_confidence,
+            "is_duplicate": False
+        }
+
+    # 3. SAME-SELLER REPEAT (WAIT, not STOP)
+    if is_duplicate and same_seller:
+        verdict = "WAIT"
+        reasons.append("duplicate_same_seller")
+
+    # 4. AMOUNT MATCHING
+    expected_amount = normalize_amount(expected.get("amount"))
+    extracted_amount = normalize_amount(extracted.get("amount"))
+>>>>>>> aba3f0e96c9b960aa272c9eec4807c3b8cc2fdaf
 
     # 3. FIELD COMPARISON — the seller's expected order is the standard.
     matches, gaps = _field_sentences(extracted, expected)
     reasons = _reasons_for(matches, gaps, extracted, expected)
 
+<<<<<<< HEAD
     if reasons:
         return _result("WAIT", reasons)
 
     return _result("MATCH", [])
 
+=======
+    # 5. RECIPIENT NAME MATCHING
+    expected_name = normalize_name(expected.get("recipient"))
+    extracted_name = normalize_name(extracted.get("recipient"))
+
+    if expected_name and expected_name != extracted_name:
+        verdict = "WAIT"
+        reasons.append("recipient_mismatch")
+
+    # 6. REFERENCE MATCHING (NEW)
+    expected_ref = normalize_name(expected.get("reference"))
+    extracted_ref = normalize_name(extracted.get("reference"))
+
+    if expected_ref and expected_ref != extracted_ref:
+        verdict = "WAIT"
+        reasons.append("reference_mismatch")
+
+    # 7. GENERATE EXPLANATION
+    if verdict == "MATCH":
+        explanation = get_template("MATCH")
+    elif "amount_mismatch" in reasons:
+        explanation = get_template("WAIT_AMOUNT")
+    elif "recipient_mismatch" in reasons:
+        explanation = get_template("WAIT_NAME")
+    elif "reference_mismatch" in reasons:
+        explanation = "The payment reference does not match your sale. Verify the funds in your bank."
+    else:
+        explanation = get_template("MATCH")
+>>>>>>> aba3f0e96c9b960aa272c9eec4807c3b8cc2fdaf
 
 # Kept for callers that only want a canned sentence (offline fallbacks).
 __all__ = [

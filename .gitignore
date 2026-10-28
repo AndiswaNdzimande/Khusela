@@ -229,3 +229,4 @@ __pycache__/
 *.db
 
 tests/fixtures/x01_oversized.png
+*:Zone.Identifier
